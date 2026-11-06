@@ -1,0 +1,1228 @@
+/* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
+class VeltoDashboard extends HTMLElement {
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastRequest=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false}
+  layoutStorageKey(config=this._config){
+    const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
+    const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
+    return 'velto:layout:v1:'+path+':'+scope
+  }
+  layoutSizeStorageKey(config=this._config){return this.layoutStorageKey(config)+':sizes'}
+  readLocalSizes(config=this._config){
+    if(config?.layout_persistence==='config')return null;
+    try{
+      const raw=globalThis?.localStorage?.getItem?.(this.layoutSizeStorageKey(config));if(!raw)return null;
+      const parsed=JSON.parse(raw);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return null;
+      const clean={};for(const [room,items] of Object.entries(parsed)){
+        if(!items||typeof items!=='object'||Array.isArray(items))continue;
+        const sizes={};for(const [id,size] of Object.entries(items))if(typeof id==='string'&&['small','medium','large'].includes(size))sizes[id]=size;
+        if(Object.keys(sizes).length)clean[room]=sizes
+      }
+      this._layoutStorageWarning=false;return clean
+    }catch(error){this._layoutStorageWarning=true;console.warn('VELTO local tile sizes unavailable',error);return null}
+  }
+  persistLocalSizes(sizes=this._config.tile_sizes){
+    if(this._config?.layout_persistence==='config')return false;
+    try{globalThis?.localStorage?.setItem?.(this.layoutSizeStorageKey(),JSON.stringify(sizes||{}));this._layoutStorageWarning=false;return true}
+    catch(error){this._layoutStorageWarning=true;console.warn('VELTO local tile size save failed',error);return false}
+  }
+  readLocalLayout(config=this._config){
+    if(config?.layout_persistence==='config')return null;
+    try{
+      const raw=globalThis?.localStorage?.getItem?.(this.layoutStorageKey(config));if(!raw)return null;
+      const parsed=JSON.parse(raw);if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return null;
+      const clean={};for(const [room,ids] of Object.entries(parsed))if(Array.isArray(ids))clean[room]=ids.filter(id=>typeof id==='string');
+      this._layoutStorageWarning=false;return clean
+    }catch(error){this._layoutStorageWarning=true;console.warn('VELTO local layout unavailable',error);return null}
+  }
+  persistLocalLayout(order=this._config.tile_order){
+    if(this._config?.layout_persistence==='config')return false;
+    try{globalThis?.localStorage?.setItem?.(this.layoutStorageKey(),JSON.stringify(order||{}));this._layoutStorageWarning=false;return true}
+    catch(error){this._layoutStorageWarning=true;console.warn('VELTO local layout save failed',error);return false}
+  }
+  clearLocalLayout(){
+    try{globalThis?.localStorage?.removeItem?.(this.layoutStorageKey());globalThis?.localStorage?.removeItem?.(this.layoutSizeStorageKey());this._layoutStorageWarning=false;return true}
+    catch(error){this._layoutStorageWarning=true;console.warn('VELTO local layout reset failed',error);return false}
+  }
+  commitLayoutState(order,sizes,{persist=true,emit=true}={}){
+    const cleanOrder={};for(const [room,ids] of Object.entries(order||{}))if(Array.isArray(ids)&&ids.length)cleanOrder[room]=[...new Set(ids.filter(id=>typeof id==='string'))];
+    const cleanSizes={};for(const [room,items] of Object.entries(sizes||{})){
+      if(!items||typeof items!=='object'||Array.isArray(items))continue;
+      const roomSizes={};for(const [id,size] of Object.entries(items))if(typeof id==='string'&&['small','medium','large'].includes(size))roomSizes[id]=size;
+      if(Object.keys(roomSizes).length)cleanSizes[room]=roomSizes
+    }
+    const config={...this._config,tile_order:cleanOrder,tile_sizes:cleanSizes};this._config=config;this._localLayoutOrder=cleanOrder;this._localTileSizes=cleanSizes;
+    const mode=this._config.layout_persistence||'hybrid';
+    if(persist&&mode!=='config'){this.persistLocalLayout(cleanOrder);this.persistLocalSizes(cleanSizes)}
+    if(emit&&mode!=='local')this.dispatchEvent(new CustomEvent('config-changed',{detail:{config},bubbles:true,composed:true}));
+    this.render()
+  }
+  applyLayoutOrder(order,options){this.commitLayoutState(order,this._config.tile_sizes,options)}
+  applyTileSize(roomId,entityId,size){
+    if(!roomId||!entityId||!['small','medium','large'].includes(size))return;
+    const sizes={...(this._config.tile_sizes||{}),[roomId]:{...(this._config.tile_sizes?.[roomId]||{}),[entityId]:size}};
+    this.commitLayoutState(this._config.tile_order,sizes)
+  }
+  resetLayout(roomId){
+    const order={...(this._config.tile_order||{})},sizes={...(this._config.tile_sizes||{})};
+    if(roomId&&roomId!=='all'){delete order[roomId];delete sizes[roomId]}else{for(const key of Object.keys(order))delete order[key];for(const key of Object.keys(sizes))delete sizes[key]}
+    this.commitLayoutState(order,sizes)
+  }
+  setConfig(config){if(!config||(!Array.isArray(config.rooms)&&!config.auto_areas))throw Error('VELTO: rooms must be an array, or enable auto_areas');
+    const local=config.layout_persistence==='config'?null:this.readLocalLayout(config),localSizes=config.layout_persistence==='config'?null:this.readLocalSizes(config);
+    const configured=config.tile_order&&typeof config.tile_order==='object'&&!Array.isArray(config.tile_order)?config.tile_order:{};
+    const configuredSizes=config.tile_sizes&&typeof config.tile_sizes==='object'&&!Array.isArray(config.tile_sizes)?config.tile_sizes:{};
+    this._localLayoutOrder=local;this._localTileSizes=localSizes;this._config={...config,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();this.render()}
+  set hass(value){
+    const previousConnection=this._hass?.connection;
+    this._hass=value;
+    if(previousConnection&&value?.connection&&previousConnection!==value.connection){this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarRequest++;this._calendarLoading=false}
+    this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();
+    const rooms=this.getRooms(),ids=new Set(rooms.flatMap(r=>(r.entities||[]).map(e=>typeof e==='string'?e:e.entity)));
+    if(this._config.presence?.entity)ids.add(this._config.presence.entity);
+    for(const id of Object.values(this._config.weather?.entities||{}))if(id)ids.add(id);
+    const forecastWeatherId=this.weatherForecastEntity();if(forecastWeatherId)ids.add(forecastWeatherId);
+    const signature=[this._room,this._config.theme==='auto'?String(value?.themes?.darkMode):'',rooms.map(r=>[r.id,r.name,(r.entities||[]).map(e=>typeof e==='string'?e:e.entity).join(',')].join(':')).join('|'),
+      ...[...ids].sort().map(id=>{const s=value?.states?.[id];return id+':'+(s?.state||'')+':'+(s?.last_updated||'')+':'+(['media_player','light','fan','climate','cover','vacuum','camera'].includes(id.split('.')[0])?[s?.attributes?.entity_picture,s?.attributes?.media_image_url,s?.attributes?.media_title,s?.attributes?.media_artist,s?.attributes?.app_name,s?.attributes?.source,s?.attributes?.volume_level,s?.attributes?.media_duration,s?.attributes?.media_position,s?.attributes?.brightness,s?.attributes?.percentage,s?.attributes?.temperature,s?.attributes?.current_temperature,s?.attributes?.hvac_action,s?.attributes?.current_position,s?.attributes?.battery_level,s?.attributes?.status].map(x=>x==null?'':String(x)).join('|'):'')})].join(';');
+    if(signature!==this._lastSignature){this._lastSignature=signature;this.render()}
+  }
+  connectedCallback(){
+    if(!this._fullscreenListener){
+      this._fullscreenListener=()=>this.updateFullscreenButton();
+      document.addEventListener('fullscreenchange',this._fullscreenListener);
+    }
+    if(!this._calendarTimer)this._calendarTimer=setInterval(()=>this.loadCalendar(true),300000);
+    this.loadWeatherForecast();
+    if(!this._weatherTimer)this._weatherTimer=setInterval(()=>this.loadWeatherForecast(true),1800000);
+    if(!this._storageListener){
+      this._storageListener=e=>{
+        if(this._config?.layout_persistence==='config'||![this.layoutStorageKey(),this.layoutSizeStorageKey()].includes(e?.key))return;
+        const local=this.readLocalLayout()||{},localSizes=this.readLocalSizes()||{};
+        const merged={...(this._config.tile_order||{}),...local},mergedSizes={...(this._config.tile_sizes||{}),...localSizes};
+        if(JSON.stringify(merged)===JSON.stringify(this._config.tile_order||{})&&JSON.stringify(mergedSizes)===JSON.stringify(this._config.tile_sizes||{}))return;
+        this._config={...this._config,tile_order:merged,tile_sizes:mergedSizes};this._localLayoutOrder=local;this._localTileSizes=localSizes;this.render()
+      };
+      globalThis?.addEventListener?.('storage',this._storageListener)
+    }
+  }
+  disconnectedCallback(){
+    if(this._calendarTimer){clearInterval(this._calendarTimer);this._calendarTimer=null}
+    if(this._weatherTimer){clearInterval(this._weatherTimer);this._weatherTimer=null}
+    if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
+    if(this._fullscreenListener){document.removeEventListener('fullscreenchange',this._fullscreenListener);this._fullscreenListener=null}
+    if(this._storageListener){globalThis?.removeEventListener?.('storage',this._storageListener);this._storageListener=null}
+    this._closeDetails?.()
+  }
+  moveTile(roomId,entityId,targetId){
+    if(!roomId||!entityId||!targetId||entityId===targetId)return;
+    const room=this.getRooms().find(r=>r.id===roomId);
+    if(!room)return;
+    const available=[...new Set((room.entities||[]).map(t=>typeof t==='string'?t:t?.entity).filter(Boolean))];
+    const saved=Array.isArray(this._config.tile_order?.[roomId])?this._config.tile_order[roomId]:[];
+    const ids=[...saved.filter(id=>available.includes(id)),...available.filter(id=>!saved.includes(id))];
+    const from=ids.indexOf(entityId),to=ids.indexOf(targetId);
+    if(from<0||to<0)return;
+    ids.splice(from,1);ids.splice(to,0,entityId);
+    this.applyLayoutOrder({...this._config.tile_order,[roomId]:ids})
+  }
+  updateFullscreenButton(){
+    const button=this.shadowRoot?.querySelector?.('.velto-fullscreen');
+    if(!button)return;
+    const active=document.fullscreenElement===this;
+    button.textContent=active?'Zamknij pełny ekran':'Pełny ekran';
+    button.setAttribute('aria-pressed',String(active));
+  }
+  async toggleFullscreen(){
+    try{
+      if(document.fullscreenElement===this)await document.exitFullscreen();
+      else if(document.fullscreenElement)await document.exitFullscreen();
+      else if(this.requestFullscreen)await this.requestFullscreen();
+      else throw Error('Fullscreen API unavailable');
+    }catch(error){
+      console.warn('VELTO fullscreen unavailable',error);
+      const button=this.shadowRoot?.querySelector?.('.velto-fullscreen');
+      if(button)button.textContent='Pełny ekran niedostępny';
+    }
+    this.updateFullscreenButton()
+  }
+  weatherForecastEntity(){
+    const explicit=this._config.weather?.forecast_entity||this._config.weather?.entity;
+    if(typeof explicit==='string'&&explicit.startsWith('weather.')&&this._hass?.states?.[explicit])return explicit;
+    const available=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('weather.')&&!['unknown','unavailable'].includes(this._hass.states[id]?.state));
+    const daily=available.filter(id=>(Number(this._hass.states[id]?.attributes?.supported_features)||0)&1);
+    if(daily.length===1)return daily[0];
+    return available.length===1?available[0]:null
+  }
+  weatherForecastType(entity){
+    const features=Number(this._hass?.states?.[entity]?.attributes?.supported_features)||0;
+    if(features&1)return 'daily';
+    if(features&4)return 'twice_daily';
+    return 'daily'
+  }
+  weatherConditionLabel(condition){
+    return ({'clear-night':'Bezchmurnie','cloudy':'Pochmurno','fog':'Mgła','hail':'Grad','lightning':'Burze','lightning-rainy':'Burze z deszczem','partlycloudy':'Częściowe zachmurzenie','pouring':'Ulewa','rainy':'Deszcz','snowy':'Śnieg','snowy-rainy':'Śnieg z deszczem','sunny':'Słonecznie','windy':'Wietrznie','windy-variant':'Wietrznie i pochmurno','exceptional':'Nietypowe warunki'})[condition]||condition||'Brak danych'
+  }
+  weatherConditionSymbol(condition){
+    return ({'clear-night':'☾','cloudy':'☁','fog':'≋','hail':'◇','lightning':'ϟ','lightning-rainy':'ϟ','partlycloudy':'☁','pouring':'☂','rainy':'☂','snowy':'❄','snowy-rainy':'❄','sunny':'☀','windy':'≋','windy-variant':'≋','exceptional':'!'})[condition]||'○'
+  }
+  normalizeDailyForecast(items,type='daily'){
+    if(!Array.isArray(items))return [];
+    const valid=[];
+    for(const raw of items){
+      if(!raw||typeof raw!=='object'||typeof raw.datetime!=='string')continue;
+      const date=new Date(raw.datetime);if(Number.isNaN(date.getTime()))continue;
+      const high=Number(raw.temperature),low=Number(raw.templow),precip=Number(raw.precipitation_probability);
+      valid.push({datetime:raw.datetime,date,condition:typeof raw.condition==='string'?raw.condition:'',temperature:Number.isFinite(high)?high:null,templow:Number.isFinite(low)?low:null,precipitation_probability:Number.isFinite(precip)?Math.max(0,Math.min(100,precip)):null,is_daytime:raw.is_daytime})
+    }
+    if(type!=='twice_daily')return valid.slice(0,7).map(({date,is_daytime,...item})=>item);
+    const grouped=new Map();
+    for(const item of valid){
+      const key=[item.date.getFullYear(),item.date.getMonth(),item.date.getDate()].join('-'),current=grouped.get(key)||{datetime:item.datetime,condition:'',temperature:null,templow:null,precipitation_probability:null};
+      const value=item.temperature;
+      if(item.is_daytime!==false){
+        if(value!==null)current.temperature=current.temperature===null?value:Math.max(current.temperature,value);
+        if(item.condition)current.condition=item.condition
+      }else if(value!==null)current.templow=current.templow===null?value:Math.min(current.templow,value);
+      if(item.templow!==null)current.templow=current.templow===null?item.templow:Math.min(current.templow,item.templow);
+      if(item.precipitation_probability!==null)current.precipitation_probability=current.precipitation_probability===null?item.precipitation_probability:Math.max(current.precipitation_probability,item.precipitation_probability);
+      grouped.set(key,current)
+    }
+    return [...grouped.values()].slice(0,7)
+  }
+  async loadWeatherForecast(force=false){
+    const entity=this._config.weather?.show_forecast===false?null:this.weatherForecastEntity(),connection=this._hass?.connection,forecastType=entity?this.weatherForecastType(entity):'daily';
+    if(!entity||!connection?.subscribeMessage){
+      this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;
+      if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
+      return
+    }
+    if(!force&&this._weatherForecastEntity===entity&&this._weatherForecastConnection===connection&&this._weatherForecastUnsub)return;
+    const request=++this._weatherForecastRequest;
+    if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
+    this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=entity;this._weatherForecastConnection=connection;
+    try{
+      const unsub=await connection.subscribeMessage(event=>{
+        if(request!==this._weatherForecastRequest||this._hass?.connection!==connection||this.weatherForecastEntity()!==entity)return;
+        this._weatherForecast=this.normalizeDailyForecast(event?.forecast,event?.type||forecastType);
+        this._weatherForecastError=null;this.render()
+      },{type:'weather/subscribe_forecast',forecast_type:forecastType,entity_id:entity});
+      if(request!==this._weatherForecastRequest||this._hass?.connection!==connection){try{unsub?.()}catch{}return}
+      this._weatherForecastUnsub=typeof unsub==='function'?unsub:null;this._weatherForecastConnection=connection
+    }catch(error){
+      if(request!==this._weatherForecastRequest)return;
+      this._weatherForecast=[];this._weatherForecastError=error;this._weatherForecastConnection=connection;console.warn('VELTO daily forecast unavailable',error);this.render()
+    }
+  }
+  async loadCalendar(force=false){
+    const cfg=this._config.calendar,ids=[...new Set((Array.isArray(cfg?.entities)?cfg.entities:[cfg?.entity]).filter(x=>typeof x==='string'&&/^calendar\.[a-z0-9_]+$/.test(x)))];
+    if(!ids.length){this._calendarEvents=[];this._calendarError=null;this._calendarKey='';this._calendarRequest++;this._calendarLoading=false;return}
+    if(!this._hass?.callApi)return;
+    const api=this._hass,connection=api.connection;
+    const requestedDays=Number(cfg.days);const days=Number.isFinite(requestedDays)&&requestedDays>0?Math.max(1,Math.min(90,Math.floor(requestedDays))):14,key=ids.join('|')+'|'+days;
+    if(!force&&this._calendarKey===key)return;
+    if(this._calendarLoading&&this._calendarKey===key)return;
+    this._calendarLoading=true;this._calendarKey=key;this._calendarConnection=connection;const request=++this._calendarRequest;
+    const start=new Date(),end=new Date(start.getTime()+days*86400000);
+    try{
+      const result=await Promise.allSettled(ids.map(async id=>{
+        const path='calendars/'+encodeURIComponent(id)+'?start='+encodeURIComponent(start.toISOString())+'&end='+encodeURIComponent(end.toISOString());
+        const events=await api.callApi('GET',path);
+        return (Array.isArray(events)?events:[]).filter(event=>event&&typeof event==='object'&&!Array.isArray(event)).map(event=>({...event,calendar:id}))
+      }));
+      if(request!==this._calendarRequest||this._hass?.connection!==connection)return;
+      const successful=result.filter(item=>item.status==='fulfilled');
+      const failures=result.filter(item=>item.status==='rejected');
+      if(failures.length)console.warn('VELTO: '+failures.length+' calendar source(s) unavailable',failures.map(item=>item.reason));
+      this._calendarEvents=successful.flatMap(item=>item.value).filter(event=>{
+        const startDate=this.eventDate(event.start);
+        if(!Number.isFinite(startDate.getTime()))return false;
+        const endValue=event.end?.dateTime||event.end?.date||event.end;
+        const endDate=endValue?this.eventDate(endValue):startDate;
+        return Number.isFinite(endDate.getTime())&&endDate>=start&&endDate>=startDate
+      }).sort((a,b)=>this.eventDate(a.start)-this.eventDate(b.start));
+      this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this.render();
+    }catch(err){if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarError=err;this.render()}console.warn('VELTO calendar:',err)}
+    finally{if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarLoading=false;this.render()}}
+  }
+  eventDate(value){const raw=value?.dateTime||value?.date||value;if(typeof raw==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(raw)){const [y,m,d]=raw.split('-').map(Number);const date=new Date(y,m-1,d);return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d?date:new Date(NaN)}return raw==null||raw===''?new Date(NaN):new Date(raw)}
+  eventAllDay(value){return Boolean(value?.date||typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value))}
+  async loadRegistry(){
+    const connection=this._hass?.connection;
+    if(!this._config.auto_areas||!connection)return;
+    if(this._registryLoading&&this._registryLoadingConnection===connection)return;
+    if(this._registryConnection===connection||this._registryFailedConnection===connection)return;
+    const request=++this._registryRequest;
+    this._registryLoading=true;this._registryLoadingConnection=connection;
+    try{const [areas,entities,devices]=await Promise.all([
+      connection.sendMessagePromise({type:'config/area_registry/list'}),
+      connection.sendMessagePromise({type:'config/entity_registry/list'}),
+      connection.sendMessagePromise({type:'config/device_registry/list'})
+    ]);
+    if(request!==this._registryRequest||this._hass?.connection!==connection||!this._config.auto_areas)return;
+    this._registry={areas,entities,devices};this._registryError=null;this._registryConnection=connection;this.render();
+    }catch(error){
+      if(request!==this._registryRequest||this._hass?.connection!==connection||!this._config.auto_areas)return;
+      this._registryFailedConnection=connection;this._registryError=error;this.render();console.warn('VELTO: area discovery unavailable',error)
+    }finally{if(request===this._registryRequest){this._registryLoading=false;this._registryLoadingConnection=null}}
+  }
+  autoRoomIcon(name){
+    const n=String(name||'').toLowerCase();
+    if(/kuchnia|kitchen/.test(n))return 'plug';
+    if(/łazien|lazien|bath/.test(n))return 'water';
+    if(/garaż|garaz|garage|wejści|wejsci|hall|korytarz|entrance/.test(n))return 'door';
+    if(/ogród|ogrod|garden|taras|terrace|patio|balkon|balcony/.test(n))return 'sun';
+    if(/sypial|bedroom|pokój|pokoj|room|dzieci|child/.test(n))return 'light';
+    if(/biuro|office|pracown/.test(n))return 'plug';
+    if(/kotł|boiler|utility|technicz/.test(n))return 'climate';
+    return 'home'
+  }
+  autoTileSize(entityId){
+    if(this._config.smart_layout===false)return 'small';
+    const domain=String(entityId||'').split('.')[0];
+    if(['media_player','camera','weather'].includes(domain))return 'large';
+    if(['vacuum','climate','cover','alarm_control_panel','water_heater'].includes(domain))return 'medium';
+    return 'small'
+  }
+  autoEntityVisible(entry){
+    if(!entry?.entity_id)return false;
+    if(entry.disabled_by||entry.hidden_by)return false;
+    if(!this._config.show_diagnostics&&['diagnostic','config'].includes(entry.entity_category))return false;
+    return true
+  }
+  roomContext(room){
+    const ids=[...new Set((room?.entities||[]).map(item=>typeof item==='string'?item:item?.entity).filter(Boolean))];
+    const live=ids.filter(id=>this.entity(id)&&!['unknown','unavailable'].includes(this.entity(id).state));
+    const lights=live.filter(id=>id.startsWith('light.')),lightsOn=lights.filter(id=>this.entity(id)?.state==='on');
+    const covers=live.filter(id=>id.startsWith('cover.')),coversOpen=covers.filter(id=>['open','opening'].includes(this.entity(id)?.state));
+    const media=live.filter(id=>id.startsWith('media_player.')),mediaPlaying=media.filter(id=>this.entity(id)?.state==='playing');
+    const actions=live.filter(id=>['scene','script'].includes(id.split('.')[0])).slice(0,6);
+    const temperatures=[];
+    for(const id of live){
+      const state=this.entity(id),domain=id.split('.')[0];
+      if(domain==='climate'&&Number.isFinite(Number(state.attributes?.current_temperature)))temperatures.push(Number(state.attributes.current_temperature));
+      else if(domain==='sensor'&&state.attributes?.device_class==='temperature'&&Number.isFinite(Number(state.state)))temperatures.push(Number(state.state))
+    }
+    const temperature=temperatures.length?temperatures.reduce((sum,n)=>sum+n,0)/temperatures.length:null;
+    const security=live.filter(id=>{const state=this.entity(id),domain=id.split('.')[0],dc=state.attributes?.device_class;return ['camera','lock','alarm_control_panel'].includes(domain)||(domain==='binary_sensor'&&['door','window','opening','garage_door','smoke','moisture','gas','problem','safety'].includes(dc))});
+    const categories={lights:lights.length,media:media.length,climate:live.filter(id=>['climate','humidifier','water_heater'].includes(id.split('.')[0])).length,covers:covers.length,security:security.length};
+    return {ids,lights,lightsOn,covers,coversOpen,media,mediaPlaying,actions,temperature,categories}
+  }
+  categoryMatch(id){
+    const filter=this._categoryFilter||'all';if(filter==='all')return true;
+    const state=this.entity(id),domain=id.split('.')[0],dc=state?.attributes?.device_class;
+    if(filter==='lights')return domain==='light';
+    if(filter==='media')return domain==='media_player';
+    if(filter==='climate')return ['climate','humidifier','water_heater'].includes(domain)||(domain==='sensor'&&['temperature','humidity'].includes(dc));
+    if(filter==='covers')return domain==='cover';
+    if(filter==='security')return ['camera','lock','alarm_control_panel'].includes(domain)||(domain==='binary_sensor'&&['door','window','opening','garage_door','smoke','moisture','gas','problem','safety'].includes(dc));
+    return true
+  }
+  async bulkAction(domain,service,ids){
+    const entities=[...new Set((ids||[]).filter(id=>typeof id==='string'&&id.startsWith(domain+'.')))];
+    if(!entities.length||!this._hass?.callService)return;
+    try{await this._hass.callService(domain,service,{entity_id:entities})}catch(error){console.error('VELTO bulk control failed',error)}
+  }
+  homeHighlights(rooms){
+    const maxRaw=Number(this._config.home_highlight_limit),limit=Number.isFinite(maxRaw)?Math.max(4,Math.min(12,Math.floor(maxRaw))):8;
+    const pinned=Array.isArray(this._config.home_favorites)?this._config.home_favorites.filter(id=>typeof id==='string'):[];
+    const seen=new Set(),candidates=[];
+    for(const room of rooms||[])for(const raw of room.entities||[]){
+      const item=typeof raw==='string'?{entity:raw}:raw,id=item?.entity;
+      if(!id||seen.has(id))continue;seen.add(id);
+      const state=this.entity(id);if(!state||['unknown','unavailable'].includes(state.state))continue;
+      const domain=id.split('.')[0],dc=state.attributes?.device_class;
+      let base={media_player:48,camera:44,vacuum:42,climate:40,alarm_control_panel:39,lock:34,cover:33,light:31,fan:29,switch:22,input_boolean:18}[domain];
+      if(domain==='binary_sensor'){
+        if(['smoke','moisture','gas','problem','safety'].includes(dc))base=46;
+        else if(['door','window','opening','garage_door'].includes(dc))base=35;
+      }
+      if(base===undefined&&!pinned.includes(id))continue;
+      const active=['on','open','opening','unlocked','heat','cool','heating','playing','cleaning','returning','triggered','pending'].includes(state.state);
+      let score=base??10;
+      if(active)score+=42;
+      if(domain==='media_player'&&state.state==='playing')score+=22;
+      if(domain==='vacuum'&&['cleaning','returning'].includes(state.state))score+=18;
+      if(domain==='lock'&&state.state==='unlocked')score+=60;
+      if(domain==='cover'&&['open','opening'].includes(state.state))score+=35;
+      if(domain==='alarm_control_panel'&&['triggered','pending'].includes(state.state))score+=80;
+      if(domain==='binary_sensor'&&state.state==='on')score+=['smoke','moisture','gas','problem','safety'].includes(dc)?80:35;
+      const pinnedIndex=pinned.indexOf(id);if(pinnedIndex>=0)score=1000-pinnedIndex;
+      const size=['media_player','camera','vacuum','climate','cover'].includes(domain)?'medium':'small';
+      candidates.push({item:{...item,size},score,name:this.name(id)||id})
+    }
+    return candidates.sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'pl')).slice(0,limit).map(x=>x.item)
+  }
+  getRooms(){
+    const manual=Array.isArray(this._config.rooms)?this._config.rooms:[];
+    if(!this._config.auto_areas||!this._registry)return manual;
+    const {areas,entities,devices}=this._registry;
+    const deviceArea=new Map((devices||[]).filter(d=>d?.id).map(d=>[d.id,d.area_id]));
+    const ignored=new Set(['update','event','time','date','text','diagnostic','sun','zone','persistent_notification','device_tracker','person']);
+    const included=new Set(Array.isArray(this._config.auto_domains)?this._config.auto_domains.filter(domain=>typeof domain==='string'):['light','switch','fan','cover','climate','sensor','binary_sensor','media_player','lock','vacuum','scene','script','button','input_boolean','automation','humidifier','water_heater','alarm_control_panel','remote','select','number','input_select','input_number','input_button','weather','camera']);
+    const groups=(areas||[]).filter(area=>area&&(area.area_id||area.id)).map(area=>{const name=area.name||'Pomieszczenie';return {id:'area_'+(area.area_id||area.id),name,icon:this.autoRoomIcon(name),entities:[]}});
+    const lookup=new Map(groups.map(r=>[r.id.slice(5),r]));const seen=new Set();
+    const priority={vacuum:0,media_player:1,camera:2,climate:3,cover:4,light:5,fan:6,lock:7,switch:8,scene:9,script:10,binary_sensor:12,sensor:13};
+    const maxRaw=Number(this._config.max_auto_entities),maxPerRoom=Number.isFinite(maxRaw)?Math.max(8,Math.min(60,Math.floor(maxRaw))):24;
+    const sortedEntities=[...(entities||[])].sort((a,b)=>(priority[a?.entity_id?.split('.')[0]]??20)-(priority[b?.entity_id?.split('.')[0]]??20));
+    for(const e of sortedEntities){
+      if(!this.autoEntityVisible(e)||seen.has(e.entity_id)||!this._hass?.states?.[e.entity_id])continue;
+      const domain=e.entity_id.split('.')[0];if(ignored.has(domain)||!included.has(domain))continue;
+      const area=e.area_id||deviceArea.get(e.device_id),room=lookup.get(area);
+      if(room&&room.entities.length<maxPerRoom){room.entities.push({entity:e.entity_id,size:this.autoTileSize(e.entity_id)});seen.add(e.entity_id)}
+    }
+    return [...manual,...groups.filter(g=>(!this._config.hide_empty_rooms||g.entities.length)&&!manual.some(r=>r.id===g.id||r.name===g.name))];
+  }
+  getCardSize(){return 8}
+  static getStubConfig(){return {title:'Mój dom',auto_areas:true,hide_empty_rooms:true,theme:'auto',smart_layout:true,show_diagnostics:false,max_auto_entities:24,show_home_highlights:true,home_highlight_limit:8,room_controls:true,scene_shortcuts:true,layout_persistence:'hybrid',rooms:[]}}
+  static getConfigElement(){return document.createElement('velto-dashboard-editor')}
+  getGridOptions(){return {columns:12,min_columns:6,rows:8}}
+  entity(id){return this._hass?.states?.[id]}
+  text(id){const s=this.entity(id);return s&&!['unknown','unavailable'].includes(s.state)?s.state:null}
+  name(id){return this.entity(id)?.attributes?.friendly_name||id}
+  weatherNumber(id){const raw=this.text(id);if(raw===null||raw===undefined)return null;const value=String(raw).trim();if(!value||['unknown','unavailable','none','null','nan'].includes(value.toLowerCase()))return null;const num=Number(value.replace(',','.'));return Number.isFinite(num)?num:null}
+  async action(id,kind){
+    if(typeof id!=='string'||!id.includes('.'))return;
+    const domain=id.split('.')[0],state=this.entity(id);
+    const details=()=>{if(['media_player','vacuum','light','camera','climate','cover'].includes(domain)&&state&&!['unknown','unavailable'].includes(state.state))this.showDetails(id);else this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))};
+    if(kind==='more'||!state||['unknown','unavailable'].includes(state.state)||
+      !['light','switch','fan','cover','scene','script','button','input_button','input_boolean','automation','media_player','vacuum','humidifier','remote'].includes(domain)){details();return}
+    let service='toggle';
+    if(domain==='scene'||domain==='script')service='turn_on';
+    if(domain==='button'||domain==='input_button')service='press';
+    if(domain==='media_player')service=state.state==='playing'?'media_pause':'media_play';
+    if(domain==='humidifier'||domain==='remote'||domain==='automation')service='toggle';
+    if(domain==='vacuum')service=state.state==='cleaning'?'return_to_base':'start';
+    if(domain==='cover')service=['open','opening'].includes(state.state)?'close_cover':'open_cover';
+    if(!this._hass?.callService)return;
+    try{await this._hass.callService(domain,service,{entity_id:id})}catch(e){console.error('VELTO control failed',e)}
+  }
+  mediaArtwork(attrs){
+    // Some media integrations expose artwork through media_image_url instead of
+    // entity_picture. Validate each candidate independently so an invalid first
+    // URL cannot suppress a valid fallback.
+    for(const url of [attrs?.entity_picture,attrs?.media_image_url]){
+      if(typeof url!=='string'||!url.trim())continue;
+      const value=url.trim();
+      if(/[\\\\\u0000-\u001f\u007f]/.test(value))continue;
+      if(value.startsWith('/')&&!value.startsWith('//'))return value;
+      if(/^https:\/\/[^\s/]+(?:[/?#]|$)/i.test(value))return value;
+    }
+    return null
+  }
+  showDetails(id){
+    const state=this.entity(id),domain=id.split('.')[0],root=this.shadowRoot;
+    if(!state||!root)return;
+    this._closeDetails?.();
+    const make=(tag,cls,content)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(content!==undefined)n.textContent=String(content);return n};
+    const backdrop=make('div','velto-modal-backdrop'),panel=make('section','velto-modal');
+    panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',this.name(id));
+    const previousFocus=root.activeElement||document.activeElement;
+    const close=()=>{backdrop.remove();document.removeEventListener('keydown',escape);if(this._closeDetails===close)this._closeDetails=null;if(previousFocus?.isConnected)previousFocus.focus?.()};this._closeDetails=close;
+    const escape=e=>{
+      if(e.key==='Escape'){e.preventDefault();close();return}
+      if(e.key!=='Tab')return;
+      const focusables=[...panel.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])')].filter(n=>!n.hidden&&n.getAttribute('aria-hidden')!=='true'&&n.getClientRects().length);
+      if(!focusables.length){e.preventDefault();return}
+      const first=focusables[0],last=focusables[focusables.length-1];
+      const active=root.activeElement||document.activeElement;
+      if(!panel.contains(active)){e.preventDefault();(e.shiftKey?last:first).focus()}
+      else if(e.shiftKey&&active===first){e.preventDefault();last.focus()}
+      else if(!e.shiftKey&&active===last){e.preventDefault();first.focus()}
+    };
+    backdrop.addEventListener('click',e=>{if(e.target===backdrop)close()});
+    document.addEventListener('keydown',escape);
+    const header=make('div','velto-modal-head'),heading=make('div','velto-modal-heading'),x=make('button','velto-modal-close','×');
+    heading.append(make('small','',domain.replace('_',' ').toUpperCase()),make('h2','',this.name(id)));x.type='button';x.setAttribute('aria-label','Zamknij');x.addEventListener('click',close);header.append(heading,x);panel.append(header);
+    const status=make('p','velto-modal-status',state.state);status.setAttribute('role','status');status.setAttribute('aria-live','polite');panel.append(status);
+    const attrs=state.attributes||{};
+    const controls=make('div','velto-modal-controls');
+    const control=(label,service,enabled=true)=>{const b=make('button','velto-modal-control',label);b.type='button';b.disabled=!enabled;b.addEventListener('click',async()=>{try{await this._hass?.callService?.(domain,service,{entity_id:id});close()}catch(err){status.textContent='Nie udało się wykonać polecenia';console.error('VELTO control failed',err)}});controls.append(b)};
+    if(domain==='camera'){
+      const cameraArt=this.mediaArtwork(attrs);const picture=cameraArt?.startsWith('/')?cameraArt:'/api/camera_proxy/'+encodeURIComponent(id);
+      const preview=make('img','velto-modal-camera');preview.alt='Ostatni dostępny obraz z kamery';preview.loading='eager';
+      const retry=make('button','velto-modal-control','Odśwież obraz');retry.type='button';
+      let refreshCount=0;
+      const refresh=()=>{
+        // Put the cache-buster before the fragment, preserving existing query parameters.
+        const hashAt=picture.indexOf('#'),base=hashAt<0?picture:picture.slice(0,hashAt),hash=hashAt<0?'':picture.slice(hashAt);
+        preview.hidden=false;retry.disabled=true;status.textContent='Ładowanie podglądu…';
+        preview.src=base+(base.includes('?')?'&':'?')+'_velto='+Date.now()+'_'+(++refreshCount)+hash;
+      };
+      retry.addEventListener('click',refresh);
+      preview.addEventListener('error',()=>{retry.disabled=false;preview.hidden=true;status.textContent='Podgląd niedostępny — sprawdź uprawnienia kamery lub otwórz ją w Home Assistant'});
+      preview.addEventListener('load',()=>{retry.disabled=false;preview.hidden=false;status.textContent=state.state});
+      panel.append(preview,retry);refresh();
+      panel.append(make('p','velto-modal-meta','Obraz statyczny z Home Assistant. Dostępność zależy od integracji i uprawnień kamery.'));
+    }else if(domain==='media_player'){
+      const artUrl=this.mediaArtwork(attrs);
+      if(artUrl){const art=make('img','velto-modal-art');art.alt='Okładka odtwarzanego materiału';art.loading='lazy';art.src=artUrl;art.addEventListener('error',()=>art.remove());panel.append(art)}
+            if(attrs.media_title)panel.append(make('div','velto-modal-title',attrs.media_title));
+      if(attrs.media_artist||attrs.app_name)panel.append(make('p','velto-modal-meta',[attrs.media_artist,attrs.app_name].filter(Boolean).join(' · ')));
+      const duration=Number(attrs.media_duration),position=Number(attrs.media_position);
+      if(Number.isFinite(duration)&&duration>0&&Number.isFinite(position)&&position>=0){
+        const track=make('div','velto-modal-track'),fill=make('span','velto-modal-track-fill');
+        fill.style.width=Math.max(0,Math.min(100,position/duration*100))+'%';track.append(fill);panel.append(track)
+      }
+      const features=Number(attrs.supported_features)||0;
+      control('Poprzedni','media_previous_track',Boolean(features&16));
+      control(state.state==='playing'?'Pauza':'Odtwarzaj',state.state==='playing'?'media_pause':'media_play',Boolean(features&(state.state==='playing'?1:16384)));
+      control('Następny','media_next_track',Boolean(features&32));
+      if(attrs.volume_level!==undefined&&attrs.volume_level!==null&&Number.isFinite(Number(attrs.volume_level))&&(features&4)){
+        const volume=make('label','velto-modal-meta','Głośność · '+Math.round(Math.max(0,Math.min(1,Number(attrs.volume_level)))*100)+'%');
+        const slider=make('input','velto-modal-slider');slider.type='range';slider.min='0';slider.max='100';
+        slider.value=String(Math.round(Math.max(0,Math.min(1,Number(attrs.volume_level)))*100));slider.setAttribute('aria-label','Głośność');
+        slider.addEventListener('input',()=>{volume.firstChild&&(volume.firstChild.textContent='Głośność · '+slider.value+'%')});
+        slider.addEventListener('change',async()=>{try{await this._hass?.callService?.('media_player','volume_set',{entity_id:id,volume_level:Number(slider.value)/100})}catch(err){status.textContent='Nie udało się zmienić głośności';console.error('VELTO volume failed',err)}});
+        volume.append(slider);panel.append(volume)
+      }
+    }else if(domain==='vacuum'){
+      if(attrs.battery_level!==undefined)panel.append(make('p','velto-modal-meta','Bateria: '+attrs.battery_level+'%'));
+      control('Start','start',state.state!=='cleaning');control('Pauza','pause',state.state==='cleaning');control('Do stacji','return_to_base',state.state!=='docked');
+    }else if(domain==='climate'){
+      const current=Number(attrs.current_temperature),target=Number(attrs.temperature),unit=attrs.temperature_unit||'°C';
+      if(Number.isFinite(current))panel.append(make('p','velto-modal-meta','Aktualnie: '+current.toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit));
+      if(Number.isFinite(target)){
+        const min=Number.isFinite(Number(attrs.min_temp))?Number(attrs.min_temp):5,max=Number.isFinite(Number(attrs.max_temp))?Number(attrs.max_temp):35,step=Number.isFinite(Number(attrs.target_temp_step))&&Number(attrs.target_temp_step)>0?Number(attrs.target_temp_step):0.5;
+        const label=make('label','velto-modal-meta','Temperatura docelowa · '+target.toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit),slider=make('input','velto-modal-slider');
+        slider.type='range';slider.min=String(min);slider.max=String(max);slider.step=String(step);slider.value=String(Math.max(min,Math.min(max,target)));slider.setAttribute('aria-label','Temperatura docelowa');
+        slider.addEventListener('input',()=>{if(label.firstChild)label.firstChild.textContent='Temperatura docelowa · '+Number(slider.value).toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit});
+        slider.addEventListener('change',async()=>{const value=Number(slider.value);if(!Number.isFinite(value))return;try{await this._hass?.callService?.('climate','set_temperature',{entity_id:id,temperature:value});status.textContent='Ustawiono '+value.toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit}catch(err){status.textContent='Nie udało się zmienić temperatury';console.error('VELTO climate control failed',err)}});
+        label.append(slider);panel.append(label)
+      }
+      if(Array.isArray(attrs.hvac_modes)&&attrs.hvac_modes.length){
+        const modeRow=make('div','velto-modal-controls');
+        for(const mode of attrs.hvac_modes.slice(0,6)){const b=make('button','velto-modal-control',String(mode));b.type='button';b.disabled=state.state===mode;b.addEventListener('click',async()=>{try{await this._hass?.callService?.('climate','set_hvac_mode',{entity_id:id,hvac_mode:mode});close()}catch(err){status.textContent='Nie udało się zmienić trybu';console.error('VELTO climate mode failed',err)}});modeRow.append(b)}
+        panel.append(modeRow)
+      }
+    }else if(domain==='cover'){
+      const position=Number(attrs.current_position);
+      if(Number.isFinite(position))panel.append(make('p','velto-modal-meta','Otwarcie: '+Math.round(Math.max(0,Math.min(100,position)))+'%'));
+      const features=Number(attrs.supported_features)||0;
+      control('Otwórz','open_cover',Boolean(features&1)||features===0);
+      control('Stop','stop_cover',Boolean(features&8));
+      control('Zamknij','close_cover',Boolean(features&2)||features===0);
+      if(Number.isFinite(position)&&(features&4)){
+        const label=make('label','velto-modal-meta','Pozycja · '+Math.round(position)+'%'),slider=make('input','velto-modal-slider');
+        slider.type='range';slider.min='0';slider.max='100';slider.value=String(Math.round(Math.max(0,Math.min(100,position))));slider.setAttribute('aria-label','Pozycja rolety');
+        slider.addEventListener('input',()=>{if(label.firstChild)label.firstChild.textContent='Pozycja · '+slider.value+'%'});
+        slider.addEventListener('change',async()=>{const value=Number(slider.value);if(!Number.isFinite(value))return;try{await this._hass?.callService?.('cover','set_cover_position',{entity_id:id,position:value});status.textContent='Ustawiono '+value+'%'}catch(err){status.textContent='Nie udało się ustawić pozycji';console.error('VELTO cover position failed',err)}});
+        label.append(slider);panel.append(label)
+      }
+    }else if(domain==='light'){
+      control(state.state==='on'?'Wyłącz':'Włącz','toggle');
+      if(state.state==='on'&&attrs.brightness!==undefined&&Number.isFinite(Number(attrs.brightness))){
+        const label=make('label','velto-modal-meta','Jasność'),slider=make('input','velto-modal-slider');
+        slider.type='range';slider.min='1';slider.max='100';slider.value=String(Math.max(1,Math.min(100,Math.round(Number(attrs.brightness)/255*100))));slider.setAttribute('aria-label','Jasność światła');
+        slider.addEventListener('change',async()=>{try{const brightness=Math.max(1,Math.min(100,Number(slider.value)));if(!Number.isFinite(brightness))return;await this._hass?.callService?.('light','turn_on',{entity_id:id,brightness_pct:brightness})}catch(err){console.error('VELTO brightness failed',err)}});
+        label.append(slider);panel.append(label)
+      }
+    }
+    panel.append(controls);const native=make('button','velto-modal-native','Więcej w Home Assistant');native.type='button';
+    native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
+    panel.append(native);backdrop.append(panel);root.append(backdrop);x.focus()
+  }
+  icon(name,active=false){
+    const paths={
+      home:['path|m3 10 9-7 9 7','path|M5 9v12h14V9','path|M9 21v-7h6v7'],
+      light:['path|M9 18h6','path|M10 22h4','path|M15.09 14a6 6 0 1 0-6.18 0c.7.6 1.09 1.36 1.09 2v1h4v-1c0-.64.39-1.4 1.09-2Z'],
+      switch:['rect|3 3 18 18 5','path|M12 7v5','path|M8.5 9a5 5 0 1 0 7 0'],
+      fan:['path|M12 12c-2-2-5-3-6-1-2 4 1 6 6 1Z','path|M12 12c2-2 3-5 1-6-4-2-6 1-1 6Z','path|M12 12c2 2 5 3 6 1 2-4-1-6-6-1Z','path|M12 12c-2 2-3 5-1 6 4 2 6-1 1-6Z','circle|12 12 2','circle|12 12 9'],
+      cover:['rect|4 3 16 18 2','path|M4 8h16','path|M4 12h16','path|M4 16h16','path|M8 21v-3','path|M16 21v-3'],
+      lock:['rect|5 10 14 11 2','path|M8 10V7a4 4 0 0 1 8 0v3','circle|12 15 1'],
+      climate:['path|M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0Z','path|M12 10v7'],
+      sensor:['circle|12 12 9','path|M5 12h3l2-4 4 8 2-4h3'],
+      binary_sensor:['circle|12 12 9','path|m8 12 3 3 5-6'],
+      scene:['path|m12 3 2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2Z'],
+      camera:['rect|3 5 18 15 3','circle|12 12 4','path|M8 5l1-2h6l1 2'],
+      input_boolean:['circle|12 12 9','path|M12 7v6','path|M8 10a5 5 0 1 0 8 0'],
+      script:['path|M8 4h9l3 3v13H5V4Z','path|M8 9h8','path|M8 13h8','path|M8 17h5'],
+      button:['rect|4 4 16 16 4','circle|12 12 4'],
+      automation:['path|M4 7h12','path|m13 4 3 3-3 3','path|M20 17H8','path|m11 14-3 3 3 3'],
+      humidifier:['path|M12 3C9 8 6 11 6 15a6 6 0 0 0 12 0c0-4-3-7-6-12Z','path|M9 16a3 3 0 0 0 3 3'],
+      alarm_control_panel:['path|M12 3 3 7v5c0 5 4 8 9 10 5-2 9-5 9-10V7Z','path|M12 8v5','circle|12 17 1'],
+      remote:['rect|7 2 10 20 4','circle|12 7 2','path|M10 13h4','path|M12 11v4'],
+      number:['path|M4 17h16','circle|10 17 3','path|M4 7h16'],
+      select:['rect|4 4 16 16 3','path|m8 10 4 4 4-4'],
+      media_player:['rect|3 4 18 16 2','path|M8 8h8','path|m10 11 5 3-5 3Z'],
+      vacuum:['circle|12 12 9','circle|12 12 6','rect|9 3 6 3 1','path|M7 12h3','path|M14 12h3','path|M10 16h4','circle|12 9 1'],
+      weather:['path|M20 16.6A4.5 4.5 0 0 0 17 9a6 6 0 0 0-11.5 2A4 4 0 0 0 7 19h11a4 4 0 0 0 2-2.4Z'],
+      motion:['path|M4 21v-4l5-5 3 3 4-2 4 4','circle|13 5 2','path|M8 7l3 3 4 1'],
+      door:['rect|5 3 14 18 2','circle|15 12 1'],
+      water:['path|M12 3C9 8 6 11 6 15a6 6 0 0 0 12 0c0-4-3-7-6-12Z'],
+      smoke:['path|M4 17c0-3 4-3 4-6s-4-3-4-6','path|M11 19c0-3 4-3 4-6s-4-3-4-6','path|M18 19c0-3 3-3 3-6s-3-3-3-6'],
+      sun:['circle|12 12 4','path|M12 2v2','path|M12 20v2','path|M4.9 4.9l1.4 1.4','path|m17.7 17.7 1.4 1.4','path|M2 12h2','path|M20 12h2','path|m4.9 19.1 1.4-1.4','path|m17.7 6.3 1.4-1.4'],
+      plug:['path|M8 3v5','path|M16 3v5','path|M7 8h10v4a5 5 0 0 1-10 0Z','path|M12 17v4'],
+      generic:['rect|4 4 16 16 4','circle|12 12 3']
+    };
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.8');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');
+    for(const entry of paths[name]||paths.generic){
+      const [tag,...args]=entry.split('|');const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+      if(tag==='path')el.setAttribute('d',args[0]);
+      if(tag==='circle'){el.setAttribute('cx',args[0]);el.setAttribute('cy',args[1]);el.setAttribute('r',args[2])}
+      if(tag==='rect'){['x','y','width','height','rx'].forEach((k,i)=>el.setAttribute(k,args[i]))}
+      svg.append(el)
+    }
+    return svg
+  }
+  iconFor(id,state){
+    const domain=id.split('.')[0],cls=state?.attributes?.device_class;
+    if(cls==='motion'||cls==='occupancy')return 'motion';
+    if(cls==='door'||cls==='window'||cls==='opening')return 'door';
+    if(cls==='moisture'||cls==='water')return 'water';
+    if(cls==='smoke'||cls==='gas'||cls==='carbon_monoxide')return 'smoke';
+    if(cls==='temperature')return 'climate';
+    if(cls==='humidity'||cls==='pressure')return 'weather';
+    if(cls==='power'||cls==='energy'||cls==='current'||cls==='voltage')return 'plug';
+    return ({light:'light',switch:'switch',fan:'fan',cover:'cover',lock:'lock',climate:'climate',sensor:'sensor',binary_sensor:'binary_sensor',scene:'scene',camera:'camera',input_boolean:'input_boolean',media_player:'media_player',vacuum:'vacuum',script:'script',button:'button',input_button:'button',automation:'automation',humidifier:'humidifier',water_heater:'climate',alarm_control_panel:'alarm_control_panel',remote:'remote',number:'number',input_number:'number',select:'select',input_select:'select',weather:'weather',sun:'sun'})[domain]||'generic'
+  }
+  render(){
+    const root=this.shadowRoot;if(!root)return;const openDialog=root.querySelector?.('.velto-modal-backdrop');root.replaceChildren();
+    const css=document.createElement('style');css.textContent=`\n.velto-modal-backdrop{position:fixed;inset:0;z-index:9999;background:#17120dc4;display:grid;place-items:center;padding:18px}.velto-modal{width:min(440px,100%);max-height:85vh;overflow:auto;background:#eeeae2;color:#352f29;border-radius:26px;padding:24px;box-shadow:0 24px 70px #0007}.velto-modal-head{display:flex;justify-content:space-between;align-items:start;gap:16px}.velto-modal-heading small{font-size:11px;letter-spacing:.14em;color:#96774b}.velto-modal-heading h2{font-size:23px;margin:6px 0}.velto-modal-close{border:0;background:#fff9;border-radius:12px;font-size:28px;width:40px;height:40px;cursor:pointer}.velto-modal-status,.velto-modal-meta{color:#82776a;font-size:13px}.velto-modal-camera{display:block;width:100%;max-height:320px;object-fit:contain;border-radius:16px;background:#24211e;margin:16px auto}.velto-modal-art{display:block;width:100%;max-height:220px;object-fit:contain;border-radius:16px;margin:16px auto;background:#ded7cd}.velto-modal-title{font-weight:750;margin-top:20px;overflow-wrap:anywhere}.velto-modal-controls{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}.velto-modal-control,.velto-modal-native{border:1px solid #d4c5af;background:#faf5ec;border-radius:13px;padding:12px 15px;color:#795628;font-weight:700;cursor:pointer}.velto-modal-control:disabled{opacity:.4;cursor:not-allowed}.velto-modal-native{width:100%;background:transparent}.velto-modal-track{height:6px;background:#d4cab9;border-radius:9px;margin:14px 0;overflow:hidden}.velto-modal-track-fill{display:block;height:100%;background:#b78339}.velto-modal-slider{display:block;width:100%;accent-color:#b78339;margin-top:10px}\n
+:host{display:block;container-type:inline-size;min-width:0;color:#342f29;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}.layout{display:grid;grid-template-columns:205px minmax(0,1fr);gap:22px;min-height:540px;padding:20px;border-radius:30px;background:#eae7e0;box-shadow:9px 12px 28px #0002}
+.sidebar{display:flex;flex-direction:column;gap:16px;border-right:1px solid #d3cec5;padding:12px 18px 12px 0}.brand{font-weight:850;font-size:26px;letter-spacing:-.07em}.brand span{color:#b78339}.nav{display:flex;flex-direction:column;gap:7px}
+.nav button{border:0;background:transparent;text-align:left;border-radius:14px;padding:12px 13px;font:600 13px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer;color:#736a5e;transition:background .2s;display:flex;align-items:center;gap:10px;white-space:nowrap}.nav svg{width:18px;height:18px;flex:none}
+.nav button.selected{background:#f7f2e9;color:#8c5c21;box-shadow:inset 2px 2px 5px #c9c0b3, inset -2px -2px 5px #fff}.nav-count{margin-left:auto;font-size:10px;font-variant-numeric:tabular-nums;color:#897b67;background:#ffffff70;padding:3px 6px;border-radius:8px;min-width:22px;text-align:center}.nav-active{width:6px;height:6px;border-radius:50%;background:#b78339;box-shadow:0 0 0 3px #b7833926;flex:none}.nav button.selected .nav-count{color:#85571f;background:#b7833920}
+.nav button:focus-visible,.tile:focus-visible,.brightness:focus-visible{outline:2px solid #b78339;outline-offset:2px}.nav button:hover:not(.selected){background:#ffffff70}.nav button{min-height:42px}
+.sidebar-note{margin-top:auto;font-size:11px;line-height:1.5;color:#908679}
+:host(:fullscreen){display:block;width:100vw;height:100vh;overflow:auto;background:var(--primary-background-color,#eeeae2)}:host(:fullscreen) .layout{min-height:100vh}
+.velto-fullscreen{border:1px solid #cdbd9f;background:#fff8ec;color:#76542c;border-radius:12px;padding:9px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.velto-fullscreen:focus-visible{outline:2px solid #b78339;outline-offset:3px}.dark .velto-fullscreen{background:#343941;color:#e8c58d;border-color:#65615c}
+.layout.editing .tile{outline:1px dashed #b78339;outline-offset:-4px;cursor:grab}
+.layout.editing .tile.drag-over{outline:3px solid #b78339}
+.layout.editing .tile.touch-dragging{opacity:.75;transform:scale(1.025);z-index:4;touch-action:none}
+.tile-edit-actions{display:flex;gap:5px;margin-top:8px;position:relative;z-index:2}
+.tile-edit-actions button,.velto-edit{border:1px solid #b78339;background:#fff8e9;color:#775322;border-radius:9px;min-height:32px;min-width:34px;cursor:pointer}
+.tile-edit-actions button:disabled{opacity:.35;cursor:default}
+.tile-size-actions{display:flex;gap:4px;margin-top:6px;position:relative;z-index:2}.tile-size-actions button{border:1px solid #cbb791;background:#fff8e9;color:#775322;border-radius:8px;min-height:29px;min-width:30px;padding:4px 7px;font:800 10px inherit;cursor:pointer}.tile-size-actions button.selected{background:#b78339;color:#fff;border-color:#b78339}.dark .tile-size-actions button{background:#3b4149;color:#efc784;border-color:#626a73}.dark .tile-size-actions button.selected{background:#b78339;color:#1e1913}
+.velto-edit{padding:8px 11px;font:inherit;font-size:12px;font-weight:700}
+.layout-tools{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-10px 0 16px;padding:9px 10px;border:1px dashed #c9b793;border-radius:13px;background:#fff8ea80}.layout-tools span{font-size:11px;font-weight:700;color:#7b674d;margin-right:auto}.layout-tools button{border:1px solid #c7b48f;background:#fffaf0;color:#76572f;border-radius:9px;min-height:32px;padding:6px 9px;font:700 11px inherit;cursor:pointer}.layout-tools button.confirm{background:#a65f53;color:#fff;border-color:#a65f53}.layout-tools .layout-warning{color:#a65f53}.dark .layout-tools{background:#352f2880;border-color:#6b5b46}.dark .layout-tools span{color:#d2c5b5}.dark .layout-tools button{background:#3b4149;color:#efc784;border-color:#626a73}
+.main{min-width:0;width:100%}.top{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:3px 0 22px}
+.eyebrow{font-size:10px;letter-spacing:.17em;font-weight:800;color:#978b7b;text-transform:uppercase}.top h2{font-size:27px;letter-spacing:-.055em;margin:5px 0 0}
+.presence{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:17px;background:#f5f2eb;box-shadow:3px 4px 10px #a99e8c35}
+.avatar{width:31px;height:31px;display:grid;place-items:center;border-radius:50%;background:#e8d3ae;color:#8a5c23;font-weight:750}.presence strong{font-size:12px}.presence small{display:block;color:#8c8376;font-size:11px;margin-top:2px}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;gap:10px}.active-filter{display:inline-flex;align-items:center;border:1px solid #d5c5a8;background:#f7f2e9;color:#785c31;border-radius:12px;padding:9px 13px;margin:0 0 15px;font:650 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer}.active-filter.selected{background:#b78339;color:#fff;border-color:#b78339}.active-filter:focus-visible{outline:2px solid #b78339;outline-offset:3px}.dark .active-filter{background:#39332b;color:#edc890;border-color:#6b563b}.dark .active-filter.selected{background:#b78339;color:#1e1913}.room-context{display:grid;gap:10px;margin:0 0 16px;padding:12px;border-radius:17px;background:#f5f1e9;border:1px solid #ffffffa0}.room-context-row,.room-filters,.room-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.room-chip{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border-radius:10px;background:#ffffff8c;color:#74695c;font-size:11px;font-weight:650}.room-filter,.room-quick{border:1px solid #d6c8b2;background:#fffaf1;color:#76572f;border-radius:10px;min-height:34px;padding:7px 10px;font:700 11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer}.room-filter.selected{background:#b78339;color:#fff;border-color:#b78339}.room-quick.attention{background:#fff0d7;border-color:#ddb777;color:#80561f}.room-quick.confirm{background:#a65f53;border-color:#a65f53;color:#fff}.dark .room-context{background:#2d333b;border-color:#454c55}.dark .room-chip{background:#ffffff0c;color:#d0c8bd}.dark .room-filter,.dark .room-quick{background:#393f47;color:#edc890;border-color:#62676d}.dark .room-filter.selected{background:#b78339;color:#1e1913}
+.overview{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 16px}.overview span{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;background:#f4f0e9;border-radius:13px;color:#746a5d;font-size:11px;font-weight:650}.overview b{color:#3a342d;font-size:12px}.overview .overview-warning{background:#fff0d5;color:#865b20}.overview .overview-bad{background:#f6dfdc;color:#8a493f}.dark .overview .overview-warning{background:#5a472d;color:#ffd99a}.dark .overview .overview-bad{background:#5b3936;color:#f2b2aa}
+.home-state{display:flex;align-items:center;gap:10px;padding:12px 14px;margin:0 0 15px;border-radius:16px;background:#f5f1e9;color:#6d6255;font-size:12px;font-weight:650}.home-state:before{content:'';width:8px;height:8px;border-radius:50%;background:#6f9b72;box-shadow:0 0 0 4px #6f9b7222}.home-state.attention:before{background:#c18b3b;box-shadow:0 0 0 4px #c18b3b22}.home-state.problem:before{background:#a55c52;box-shadow:0 0 0 4px #a55c5222}.dark .home-state{background:#303640;color:#d8d0c5}.section-head h3{font-size:16px;margin:0;letter-spacing:-.035em}.section-head small{font-size:11px;color:#91887c}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;min-width:0}
+.tile{touch-action:pan-y;min-width:0;min-height:136px;border:1px solid #fff9;border-radius:22px;background:linear-gradient(145deg,#f8f6f1,#e5e1d9);box-shadow:5px 6px 12px #b2aa9b66,-4px -4px 12px #fff8;padding:16px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;cursor:pointer;color:#34302a;font:inherit}
+.tile.on{background:linear-gradient(145deg,#fff2d9,#e9cb98);border-color:#f7d9a7}.tile.missing{opacity:.53}.tile{transition:transform .2s ease,box-shadow .2s ease,background .2s ease;position:relative;overflow:hidden}.tile:hover{transform:translateY(-2px);box-shadow:6px 10px 18px #9c938666,-3px -3px 12px #fff9}.tile:active{transform:translateY(1px)}.tile.on:before{content:'';position:absolute;right:13px;top:13px;width:6px;height:6px;background:#c18b3b;border-radius:50%;box-shadow:0 0 0 4px #e8ba6a38}.tile.missing:before{display:none}.tile .glyph{flex-shrink:0}.tile.small{grid-column:span 1}.tile.medium{grid-column:span 2}.tile.large{grid-column:span 4}.tile .glyph{color:#75624a}.tile.on .glyph{color:#ac772c}.tile .tile-wrap{margin-top:14px}.tile-status{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:4px 8px;border-radius:9px;font-size:10px;font-weight:750;line-height:1.2}.tile-status:before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}.tile-status-on{color:#85591f;background:#dcae5a35}.tile-status-offline{color:#8c665c;background:#b59b9250}.dark .tile-status-on{color:#f2c77d;background:#c69a4e24}.dark .tile-status-offline{color:#d6aaa2;background:#caa49d24}
+.tile .glyph{width:38px;height:38px;display:grid;place-items:center;transform-origin:center;border-radius:12px;background:#ffffff80;transition:background .2s,transform .2s}.tile .glyph svg{width:25px;height:25px;display:block}.tile.on .glyph{background:#f9e1b7}.tile.on .glyph{color:#ac772c;filter:drop-shadow(0 0 5px #eab04d66)}
+.tile[data-domain=fan].on .glyph svg{animation:velto-spin 2.4s linear infinite}.tile[data-domain=vacuum].on .glyph{animation:velto-bob 1.4s ease-in-out infinite}.tile[data-domain=climate].on .glyph{animation:velto-pulse 2s ease-in-out infinite}.tile[data-domain=media_player].on .glyph svg{animation:velto-pulse 1.8s ease-in-out infinite}.tile[data-domain=cover].on .glyph svg{animation:velto-rise 2.8s ease-in-out infinite}.tile[data-domain=light].on .glyph{animation:velto-light 3s ease-in-out infinite}.tile[data-domain=binary_sensor].on .glyph svg{animation:velto-pulse 2.2s ease-in-out infinite}@keyframes velto-spin{to{transform:rotate(360deg)}}@keyframes velto-bob{0%,100%{transform:translateX(-2px)}50%{transform:translateX(2px)}}@keyframes velto-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.65;transform:scale(1.08)}}@keyframes velto-rise{0%,100%{transform:translateY(1px)}50%{transform:translateY(-2px)}}@keyframes velto-light{0%,100%{box-shadow:0 0 0 0 #e9b45a00}50%{box-shadow:0 0 0 5px #e9b45a26}}
+.media-progress{width:100%;height:5px;background:#b9b0a180;border-radius:99px;overflow:hidden;margin-top:4px}.media-progress-fill{display:block;height:100%;background:#b78339;border-radius:99px}.media-times{display:flex;justify-content:space-between;gap:8px;color:#81776b;font-size:10px}.dark .media-progress{background:#5a5248}.dark .media-progress-fill{background:#e2b36b}.media-title{font-size:12px;font-weight:750;overflow-wrap:anywhere}.media-app,.media-volume{font-size:11px;color:#81776b}.tile-controls{display:flex;gap:6px;margin-top:10px;position:relative;z-index:2}.tile-controls button{border:1px solid #d4c5af;background:#fff9;color:#75552d;border-radius:10px;min-width:34px;min-height:32px;padding:6px 9px;font:700 12px inherit;cursor:pointer}.tile-controls button:disabled{opacity:.35;cursor:default}.dark .tile-controls button{background:#3b4149;color:#efc784;border-color:#626a73}.device-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px;font-size:10px;color:#84796d}.device-meta span{background:#ffffff70;padding:4px 7px;border-radius:8px}.dark .device-meta span{background:#ffffff10;color:#c9c1b6}
+.camera-tile-art{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:13px;margin-top:10px;background:#292724}.camera-tile-art[hidden]{display:none}.dark .camera-tile-art{background:#171a1e}
+.media-art{width:100%;max-height:110px;object-fit:cover;border-radius:12px}.tile b{display:block;font-size:13px;overflow-wrap:break-word;word-break:normal;hyphens:auto;line-height:1.35}.tile small{display:block;font-size:11px;color:#81776b;margin-top:5px;overflow-wrap:break-word;word-break:normal}.tile-wrap{min-width:0;display:flex;flex-direction:column;gap:7px}.brightness{width:100%;appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:pan-x;height:10px;margin:9px 0;border:1px solid #d5c5a8;border-radius:999px;background:linear-gradient(to right,#b78339 0%,#b78339 var(--brightness,0%),#d9d2c6 var(--brightness,0%),#d9d2c6 100%)}.brightness::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;border:3px solid #fff9;background:#b78339;box-shadow:0 2px 6px #0003}.brightness::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:3px solid #fff9;background:#b78339;box-shadow:0 2px 6px #0003}.dark .brightness{border-color:#6a5a46;background:linear-gradient(to right,#e3b66d 0%,#e3b66d var(--brightness,0%),#4b4b4b var(--brightness,0%),#4b4b4b 100%)}.dark .brightness::-webkit-slider-thumb,.dark .brightness::-moz-range-thumb{background:#e3b66d}.brightness:focus-visible{outline:2px solid #b78339;outline-offset:3px}.brightness-label{font-size:10px;color:#846b49}.tile:has(.brightness){min-height:160px}
+.weather{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:16px;padding:19px;border-radius:24px;background:linear-gradient(145deg,#f9f6f0,#e8e3da);box-shadow:inset 2px 2px 6px #c8c0b5,inset -2px -2px 8px #fff}
+.weather .temperature{font-size:38px;font-weight:800;letter-spacing:-.06em;margin:8px 0}.weather .air{font-size:12px;font-weight:650;color:#77736e}.weather .air-good{color:#317b50}.weather .air-moderate{color:#94640f}.weather .air-bad{color:#b13f37}.dark .weather .air-good{color:#87d4a2}.dark .weather .air-moderate{color:#f3c477}.dark .weather .air-bad{color:#ff9d91}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{border-radius:13px;background:#ebe6dd;padding:10px 12px;min-width:0}.metric small{display:block;font-size:10px;color:#81786d}.metric strong{font-size:15px;display:block;margin-top:6px;overflow-wrap:anywhere}
+.weather-forecast{grid-column:1/-1;margin-top:4px}.forecast-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}.forecast-head strong{font-size:12px}.forecast-head small{font-size:10px;color:#8a8176}.forecast-strip{display:grid;grid-template-columns:repeat(7,minmax(82px,1fr));gap:7px;overflow-x:auto;padding-bottom:2px;scroll-snap-type:x proximity;overscroll-behavior-x:contain}.forecast-day{min-width:82px;padding:10px 8px;border-radius:14px;background:#f2ede5;border:1px solid #ffffffb0;text-align:center;display:grid;gap:5px;scroll-snap-align:start}.forecast-day .forecast-name{font-size:10px;font-weight:800;text-transform:capitalize;color:#766d62}.forecast-day .forecast-symbol{font-size:25px;line-height:1.1;color:#8a632e}.forecast-day .forecast-temp{font-size:13px;font-weight:800}.forecast-day .forecast-low{font-size:10px;color:#8c8378}.forecast-day .forecast-rain{font-size:9px;color:#6f7d89}.forecast-status{grid-column:1/-1;padding:9px 10px;border-radius:11px;background:#f4f0e9;font-size:11px;color:#80766a}.dark .forecast-day{background:#303640;border-color:#454c55}.dark .forecast-day .forecast-name,.dark .forecast-day .forecast-low,.dark .forecast-head small{color:#b9b1a7}.dark .forecast-day .forecast-symbol{color:#efc784}.dark .forecast-status{background:#303640;color:#c9c1b7}
+ .empty{padding:18px;color:#8b8173;font-size:13px}.empty-start{margin:10px 0 18px;border:1px dashed #c4b7a6;border-radius:17px;background:#f6f2eb;line-height:1.6}.dark .empty-start{background:#303640;border-color:#60646a;color:#d6cec1}.hint{margin-top:18px;font-size:11px;color:#8f867a}
+@media(max-width:900px){.layout{grid-template-columns:145px minmax(0,1fr);gap:15px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.tile.large{grid-column:span 2}.sidebar{padding-right:10px}}
+@media(max-width:600px){.layout{display:block;padding:14px;border-radius:23px}.sidebar{border-right:0;padding:0 0 12px;margin-bottom:14px}.brand{font-size:22px}.nav{flex-direction:row;overflow-x:auto;gap:6px}.nav button{white-space:nowrap;padding:10px;scroll-snap-align:start;flex:none}.nav-count{margin-left:4px}.nav{scroll-snap-type:x proximity;overscroll-behavior-x:contain;scrollbar-width:thin}.sidebar-note{display:none}.top h2{font-size:23px}.presence{padding:7px}.tiles{gap:9px}.tile{min-height:122px;padding:13px;border-radius:19px}.weather{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:820px){.layout{grid-template-columns:150px minmax(0,1fr);gap:14px;padding:15px}.sidebar{padding-right:10px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.tile.large{grid-column:span 2}.tile.medium{grid-column:span 2}}
+@container (max-width:600px){.layout{display:block;padding:14px;border-radius:23px}.sidebar{border-right:0;padding:0 0 12px;margin:0 0 12px}.brand{font-size:22px}.nav{flex-direction:row;overflow-x:auto;gap:6px}.nav button{white-space:nowrap;padding:10px}.nav-count{margin-left:4px}.sidebar-note{display:none}.top h2{font-size:23px}.presence{padding:7px}.tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.tile{min-height:122px;padding:13px;border-radius:19px}.tile.small{grid-column:span 1}.tile.medium,.tile.large{grid-column:span 2}.weather{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:340px){.tiles{grid-template-columns:1fr}.tile.small,.tile.medium,.tile.large{grid-column:span 1}.tile{min-height:108px}.top{flex-wrap:wrap}.weather{padding:13px}.metric{padding:9px}}
+.layout.dark{background:#1e232b;color:#f1ede6;box-shadow:8px 10px 28px #0005}
+.dark .sidebar{border-color:#3a4149}.dark .nav button{color:#b6b3ad}.dark .nav button.selected{background:#373d43;color:#f0bc6a;box-shadow:inset 2px 2px 6px #14171a,inset -2px -2px 6px #4a5057}
+.dark .nav-count{color:#d2c6b7;background:#ffffff12}.dark .nav-active{background:#e6b86d}.dark .sidebar-note,.dark .eyebrow,.dark .section-head small,.dark .hint{color:#a7a29a}.dark .nav button:hover:not(.selected){background:#ffffff12}.dark .tile .glyph{color:#d7c8b4}
+.dark .top h2,.dark .section-head h3{color:#f4efe8}.dark .presence{background:#303640;box-shadow:3px 4px 10px #0005}.dark .presence small{color:#b1aba1}
+.dark .tile{background:linear-gradient(145deg,#353c45,#262c34);border-color:#4c535c;color:#f2ece4;box-shadow:5px 6px 12px #0006,-3px -3px 10px #ffffff08}
+.dark .tile.on{background:linear-gradient(145deg,#665034,#3e352b);border-color:#997449}.dark .tile .glyph{background:#ffffff0d}.dark .tile.on .glyph{background:#b8873d33}.dark .tile:hover{box-shadow:6px 10px 18px #0008,-3px -3px 12px #ffffff10}.dark .tile.on:before{background:#e6b86d;box-shadow:0 0 0 4px #d4a24c30}.dark .tile small{color:#c6beb1}
+.dark .weather{background:linear-gradient(145deg,#353b43,#282e36);box-shadow:inset 2px 2px 6px #151a20,inset -2px -2px 8px #4a515a}
+.dark .metric{background:#222830}.dark .metric small{color:#bab2a8}.dark .metric strong{color:#f5efe5}
+.dark .overview span{background:#303640;color:#b9b3aa}.dark .overview b{color:#f4e8d8}.dark .empty{color:#b5aea4}
+.calendar-refresh{border:1px solid #b7833960;border-radius:10px;background:transparent;color:inherit;padding:7px 10px;cursor:pointer;font:600 11px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.calendar-refresh:hover{background:#b7833920}.calendar-refresh:disabled{opacity:.45;cursor:wait}.calendar-refresh:focus-visible{outline:2px solid #b78339;outline-offset:2px}.calendar-section{margin-top:18px}.calendar-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.calendar-event{display:flex;gap:12px;align-items:center;background:#f7f4ee;border:1px solid #ffffffb0;padding:13px;border-radius:18px;min-width:0;box-shadow:3px 4px 10px #0000000a}.calendar-date{min-width:48px;border-radius:12px;padding:8px 6px;background:#e9dfce;text-align:center;display:grid;gap:2px}.calendar-date b{font-size:20px;line-height:1}.calendar-date small{font-size:11px;color:#8c7658;text-transform:uppercase}.calendar-copy{display:grid;gap:5px;min-width:0}.calendar-copy strong{font-size:13px;overflow-wrap:anywhere}.calendar-copy small{font-size:11px;color:#776e64}.calendar-location{opacity:.85}.calendar-empty{padding:20px;border-radius:16px;background:#f7f4ee;color:#746c61;font-size:13px}.dark .calendar-event,.dark .calendar-empty{background:#303640;border-color:#454c55;color:#f1ece5}.dark .calendar-date{background:#55432c}.dark .calendar-date small{color:#f0c17e}.dark .calendar-copy small{color:#c0b9ae}@container(max-width:620px){.calendar-list{grid-template-columns:1fr}}.registry-warning{border:1px solid #d8b16f;background:#fff3dc;color:#79531d;padding:12px 16px;border-radius:14px;margin:14px 0;font-size:13px}.dark .registry-warning{background:#423626;color:#f1d29e;border-color:#866b41}.retry-button{border:1px solid currentColor;border-radius:10px;padding:6px 10px;margin-left:8px;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}.retry-button:focus-visible{outline:2px solid #b78339;outline-offset:2px}@media(prefers-reduced-motion:reduce){.tile,.tile .glyph,.tile .glyph svg,.nav button{animation:none!important;transition:none!important}.tile:hover,.tile:active{transform:none!important}}
+`;root.append(css);
+    const h=this._hass,c=this._config;
+    const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
+    const shell=el('div','layout'+((c.theme==='dark'||c.theme==='auto'&&this._hass?.themes?.darkMode)?' dark':'')),side=el('aside','sidebar'),brand=el('div','brand');brand.append('VEL',el('span','', 'TO'));side.append(brand);
+    const nav=el('nav','nav');nav.setAttribute('aria-label','Pomieszczenia');const discoveredRooms=this.getRooms();const rooms=[{id:'all',name:'Wszystkie',icon:'home'},...discoveredRooms];
+    nav.addEventListener('keydown',e=>{
+      if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+      const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(e.target);
+      if(index<0)return;
+      e.preventDefault();
+      const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+      buttons[next]?.click();this.shadowRoot?.querySelectorAll('.nav button')?.[next]?.focus();
+    });
+    const roomStats=room=>{const ids=[...new Set((room.entities||[]).map(item=>typeof item==='string'?item:item?.entity).filter(Boolean))];return {total:ids.length,active:ids.filter(id=>['light','switch','fan','input_boolean'].includes(id.split('.')[0])&&this.entity(id)?.state==='on').length}};
+    if(!rooms.some(r=>r.id===this._room))this._room='all';
+    for(const room of rooms){const b=el('button',room.id===this._room?'selected':'');const roomName=(room.name||'').toLowerCase();const inferred=/kuchnia/.test(roomName)?'plug':/sypial|pokój/.test(roomName)?'light':/łazien|lazien/.test(roomName)?'water':/garaż|garaz/.test(roomName)?'door':/ogród|ogrod|taras/.test(roomName)?'sun':'home';b.append(this.icon(['home','light','switch','fan','cover','lock','climate','sensor','scene','camera','weather','door','plug','water','sun'].includes(room.icon)?room.icon:inferred),document.createTextNode(room.name));if(room.id!=='all'){const stats=roomStats(room),count=el('span','nav-count',String(stats.total));count.setAttribute('aria-hidden','true');b.append(count);if(stats.active){const dot=el('span','nav-active');dot.setAttribute('aria-hidden','true');b.append(dot)}}b.type='button';if(room.id===this._room)b.setAttribute('aria-current','page');b.addEventListener('click',()=>{this._room=room.id;this._categoryFilter='all';this.render()});nav.append(b)}
+    side.append(nav,el('div','sidebar-note','VELTO · Home Assistant'));shell.append(side);
+    const main=el('main','main'),top=el('header','top'),heading=el('div');if(this._editLayout)shell.classList.add('editing');heading.append(el('div','eyebrow',c.subtitle||'Inteligentny dom'),el('h2','',this._room==='all'?(c.title||'Mój dom'):(rooms.find(r=>r.id===this._room)?.name||'Pokój')));top.append(heading);
+    const fullscreen=el('button','velto-fullscreen');fullscreen.type='button';fullscreen.addEventListener('click',()=>this.toggleFullscreen());
+    top.append(fullscreen);
+    const edit=el('button','velto-edit',this._editLayout?'Zakończ układanie':'Ułóż kafelki');
+    edit.type='button';edit.setAttribute('aria-pressed',String(this._editLayout));
+    edit.addEventListener('click',()=>{this._editLayout=!this._editLayout;this.render()});
+    top.append(edit);
+    if(c.presence?.entity){const p=el('div','presence'),state=this.text(c.presence.entity);p.append(el('span','avatar',c.presence.initials||'D'));const lines=el('div');lines.append(el('strong','',c.presence.name||'Domownik'),el('small','',state==='home'?'W domu':state==='not_home'?'Poza domem':state||'Brak danych'));p.append(lines);top.append(p)}
+    // Swipe between rooms on touch devices without hijacking sliders, buttons or vertical scrolling.
+    let swipeStart=null;
+    main.addEventListener('pointerdown',e=>{
+      if(this._editLayout||e.pointerType!=='touch'||!e.isPrimary||e.target?.closest?.('button,input,select,textarea,a,[role="slider"],.velto-modal-backdrop')){swipeStart=null;return}
+      swipeStart={id:e.pointerId,x:e.clientX,y:e.clientY};
+    },{passive:true});
+    main.addEventListener('pointercancel',()=>{swipeStart=null},{passive:true});
+    main.addEventListener('pointerup',e=>{
+      const start=swipeStart;swipeStart=null;
+      if(!start||e.pointerId!==start.id||root.querySelector('.velto-modal-backdrop'))return;
+      const dx=e.clientX-start.x,dy=e.clientY-start.y;
+      if(Math.abs(dx)<85||Math.abs(dx)<Math.abs(dy)*1.5)return;
+      const index=rooms.findIndex(r=>r.id===this._room),next=rooms[index+(dx<0?1:-1)];
+      if(next){this._room=next.id;this._categoryFilter='all';this.render()}
+    },{passive:true});
+    main.append(top);
+    if(this._editLayout){
+      const tools=el('div','layout-tools'),mode=c.layout_persistence||'hybrid';
+      const labels={hybrid:'Zapis: Home Assistant + to urządzenie',config:'Zapis: tylko konfiguracja HA',local:'Zapis: tylko to urządzenie'};
+      const label=el('span',this._layoutStorageWarning?'layout-warning':'',this._layoutStorageWarning?'Lokalny zapis niedostępny':(labels[mode]||labels.hybrid));tools.append(label);
+      if(this._room!=='all'){
+        const resetRoom=el('button','','Resetuj pokój');resetRoom.type='button';resetRoom.addEventListener('click',()=>this.resetLayout(this._room));tools.append(resetRoom)
+      }
+      const resetAll=el('button','','Resetuj cały układ');resetAll.type='button';let armed=false,timer=null;
+      resetAll.addEventListener('click',()=>{
+        if(!armed){armed=true;resetAll.classList.add('confirm');resetAll.textContent='Potwierdź reset';clearTimeout(timer);timer=setTimeout(()=>{armed=false;resetAll.classList.remove('confirm');resetAll.textContent='Resetuj cały układ'},3500);return}
+        clearTimeout(timer);this.resetLayout('all')
+      });tools.append(resetAll);main.append(tools)
+    }
+    if(c.auto_areas&&this._registryError&&!this._registry){
+      const warning=el('div','registry-warning');
+      warning.append(el('span','', 'Nie udało się pobrać pomieszczeń z Home Assistant. Sprawdź uprawnienia użytkownika lub spróbuj ponownie. '));
+      const retry=el('button','retry-button','Ponów próbę');retry.type='button';
+      retry.addEventListener('click',()=>{this._registryFailedConnection=null;this._registryError=null;this.loadRegistry();this.render()});
+      warning.append(retry);main.append(warning)
+    }
+    if(this._room==='all'&&discoveredRooms.length){
+      const ids=[...new Set(discoveredRooms.flatMap(room=>(room.entities||[]).map(item=>typeof item==='string'?item:item?.entity).filter(Boolean)))];
+      const active=ids.filter(id=>['light','switch','fan','input_boolean'].includes(id.split('.')[0])&&this.entity(id)?.state==='on').length;
+      const open=ids.filter(id=>{const state=this.entity(id),domain=id.split('.')[0],dc=state?.attributes?.device_class;return domain==='lock'?state?.state==='unlocked':domain==='cover'?['open','opening'].includes(state?.state):domain==='binary_sensor'&&['door','window','opening','garage_door'].includes(dc)&&state?.state==='on'}).length;
+      const playing=ids.filter(id=>id.startsWith('media_player.')&&this.entity(id)?.state==='playing').length;
+      const offline=ids.filter(id=>{const state=this.entity(id);return !state||['unknown','unavailable'].includes(state.state)}).length;
+      const status=el('div','home-state'+(offline?' problem':open?' attention':''));
+      status.textContent=offline?offline+' urządzeń niedostępnych'+(open?' · '+open+' otwarte':''):open?open+' otwarte / odblokowane'+(playing?' · '+playing+' odtwarza':''):playing?playing+' urządzeń odtwarza':'Dom bez aktywnych ostrzeżeń';
+      main.append(status);
+      const overview=el('div','overview');
+      for(const [label,value,cls] of [['Pomieszczenia',discoveredRooms.length,''],['Urządzenia',ids.length,''],['Aktywne',active,''],['Otwarte',open,open?'overview-warning':''],['Media',playing,''],['Offline',offline,offline?'overview-bad':'']]){
+        if((label==='Otwarte'||label==='Media'||label==='Offline')&&!value)continue;
+        const chip=el('span',cls);chip.append(el('b','',String(value)),' '+label);overview.append(chip)
+      }
+      main.append(overview)
+    }
+    if(!this._editLayout&&c.room_controls!==false&&discoveredRooms.length){
+      const contextRoom=this._room==='all'?{id:'all',name:'Cały dom',entities:discoveredRooms.flatMap(room=>room.entities||[])}:discoveredRooms.find(room=>room.id===this._room);
+      if(contextRoom){
+        const context=this.roomContext(contextRoom),panel=el('section','room-context');
+        const chips=el('div','room-context-row');
+        if(Number.isFinite(context.temperature))chips.append(el('span','room-chip','🌡 '+context.temperature.toLocaleString('pl-PL',{maximumFractionDigits:1})+'°C'));
+        if(context.lights.length)chips.append(el('span','room-chip',context.lightsOn.length+'/'+context.lights.length+' światła'));
+        if(context.media.length)chips.append(el('span','room-chip',context.mediaPlaying.length+'/'+context.media.length+' media'));
+        if(context.covers.length)chips.append(el('span','room-chip',context.coversOpen.length+'/'+context.covers.length+' otwarte osłony'));
+        if(chips.children.length)panel.append(chips);
+        const filters=el('div','room-filters'),filterDefs=[['all','Wszystko',context.ids.length],['lights','Światła',context.categories.lights],['media','Media',context.categories.media],['climate','Klimat',context.categories.climate],['covers','Osłony',context.categories.covers],['security','Bezpieczeństwo',context.categories.security]];
+        for(const [key,label,count] of filterDefs){
+          if(key!=='all'&&!count)continue;
+          const b=el('button','room-filter'+(this._categoryFilter===key?' selected':''),label+(key==='all'?'':' · '+count));b.type='button';b.setAttribute('aria-pressed',String(this._categoryFilter===key));
+          b.addEventListener('click',()=>{this._categoryFilter=key;this.render()});filters.append(b)
+        }
+        panel.append(filters);
+        const actions=el('div','room-actions');
+        const addBulk=(label,ids,domain,service)=>{
+          if(!ids.length)return;
+          const b=el('button','room-quick attention',label+' · '+ids.length);b.type='button';let armed=false,timer=null;
+          b.addEventListener('click',()=>{
+            if(this._room==='all'&&!armed){armed=true;b.classList.add('confirm');b.textContent='Potwierdź · '+label;clearTimeout(timer);timer=setTimeout(()=>{armed=false;b.classList.remove('confirm');b.textContent=label+' · '+ids.length},3500);return}
+            clearTimeout(timer);this.bulkAction(domain,service,ids)
+          });actions.append(b)
+        };
+        addBulk('Wyłącz światła',context.lightsOn,'light','turn_off');
+        addBulk('Zamknij osłony',context.coversOpen,'cover','close_cover');
+        if(c.scene_shortcuts!==false)for(const id of context.actions){
+          const domain=id.split('.')[0],b=el('button','room-quick',(domain==='scene'?'Scena · ':'Skrypt · ')+(this.name(id)||id));b.type='button';b.addEventListener('click',()=>this.action(id,'toggle'));actions.append(b)
+        }
+        if(actions.children.length)panel.append(actions);
+        main.append(panel)
+      }
+    }
+    const activeFilter=el('button','active-filter'+(this._activeOnly?' selected':''),this._activeOnly?'Pokaż wszystkie':'Tylko włączone');
+    activeFilter.type='button';activeFilter.setAttribute('aria-pressed',String(this._activeOnly));activeFilter.addEventListener('click',()=>{this._activeOnly=!this._activeOnly;this.render()});
+    main.append(activeFilter);
+    const technicalFilter=el('button','active-filter'+(this._hideTechnical?' selected':''),this._hideTechnical?'Pokaż techniczne':'Ukryj techniczne');
+    technicalFilter.type='button';technicalFilter.setAttribute('aria-pressed',String(this._hideTechnical));
+    technicalFilter.title='Ukrywa pomocnicze encje i sensory diagnostyczne; nie usuwa ich z Home Assistant';
+    technicalFilter.addEventListener('click',()=>{this._hideTechnical=!this._hideTechnical;this.render()});
+    main.append(technicalFilter);
+    const isTechnicalEntity=id=>{
+      const domain=id.split('.')[0],name=(this.name(id)||'').toLowerCase(),state=this.entity(id);
+      if(['update','number','select','input_number','input_select','button','input_button'].includes(domain))return true;
+      if(['sensor','binary_sensor'].includes(domain)){
+        if(state?.attributes?.entity_category==='diagnostic'||state?.attributes?.entity_category==='config')return true;
+        return /(?:roborock|vacuum|brush|filter|mop|water box|cleaning count|charging|attached|time left|odkurzacz)/i.test(name)&&!/(?:battery|bateria|error|błąd)/i.test(name);
+      }
+      return false
+    };
+    const isActiveEntity=id=>['light','switch','fan','input_boolean'].includes(id.split('.')[0])&&this.entity(id)?.state==='on';
+    const selected=discoveredRooms.filter(r=>(this._room==='all'||r.id===this._room)&&(!c.hide_empty_rooms||(r.entities||[]).length));
+    if(this._room==='all'&&c.show_home_highlights!==false&&!this._editLayout){
+      const highlights=this.homeHighlights(discoveredRooms);
+      if(highlights.length)selected.unshift({id:'velto_highlights',name:'Najważniejsze',icon:'home',entities:highlights,_highlights:true})
+    }
+    if(this._activeOnly&&!selected.some(r=>(r.entities||[]).some(item=>isActiveEntity(typeof item==='string'?item:item?.entity||''))))main.append(el('div','empty empty-start','Brak włączonych urządzeń w wybranych pomieszczeniach.'));
+    if(!selected.length&&!discoveredRooms.length&&!this._registryLoading){main.append(el('div','empty empty-start','Brak pomieszczeń do wyświetlenia. Włącz automatyczne wykrywanie obszarów lub dodaj pomieszczenia w edytorze karty.'))}
+    for(const room of selected){
+      const order=Array.isArray(c.tile_order?.[room.id])?c.tile_order[room.id]:[];
+      const orderedEntities=[...(room.entities||[])].sort((a,b)=>{
+        const idA=typeof a==='string'?a:a?.entity,idB=typeof b==='string'?b:b?.entity;
+        const ia=order.indexOf(idA),ib=order.indexOf(idB);
+        return (ia<0?Number.MAX_SAFE_INTEGER:ia)-(ib<0?Number.MAX_SAFE_INTEGER:ib)
+      });
+      const visibleEntities=orderedEntities.filter(item=>{const id=typeof item==='string'?item:item?.entity,domain=id?.split('.')[0];return id&&(!this._activeOnly||isActiveEntity(id))&&(!this._hideTechnical||!isTechnicalEntity(id))&&this.categoryMatch(id)&&(this._editLayout||c.room_controls===false||c.scene_shortcuts===false||!['scene','script'].includes(domain))});if((this._activeOnly||this._hideTechnical||this._categoryFilter!=='all'||c.scene_shortcuts!==false)&&!visibleEntities.length)continue;const header=el('div','section-head'),stats=roomStats(room);
+      header.append(el('h3','',room.name),el('small','',room._highlights?'Automatycznie dobrane do bieżącego stanu domu':stats.total+' urządzeń'+(stats.active?' · '+stats.active+' aktywne':'')));main.append(header);
+      const grid=el('div','tiles');for(const item of visibleEntities){const t=typeof item==='string'?{entity:item}:item;if(!t?.entity)continue;const s=this.entity(t.entity),domain=t.entity.split('.')[0],on=['on','open','unlocked','heat','cool','heating','playing','cleaning'].includes(s?.state),missing=!s||['unavailable','unknown'].includes(s.state),savedSize=c.tile_sizes?.[room.id]?.[t.entity],tileSize=['small','medium','large'].includes(savedSize)?savedSize:(['small','medium','large'].includes(t.size)?t.size:'small');
+        const tile=el('div','tile '+tileSize+(on?' on':'')+(missing?' missing':''));tile.setAttribute('role',this._editLayout?'group':'button');tile.tabIndex=this._editLayout?-1:0;tile.dataset.entity=t.entity;tile.dataset.domain=domain;tile.setAttribute('aria-label',(t.name||this.name(t.entity))+': '+(s?.state||'brak danych'));if(['light','switch','fan','input_boolean'].includes(domain)&&!missing)tile.setAttribute('aria-pressed',String(on));
+        const glyph=el('span','glyph');glyph.append(this.icon(t.icon&&['light','switch','fan','cover','lock','climate','sensor','binary_sensor','scene','camera','input_boolean','media_player','vacuum','script','button','automation','humidifier','alarm_control_panel','remote','number','select','weather','motion','door','water','smoke','sun','plug'].includes(t.icon)?t.icon:this.iconFor(t.entity,s)));tile.append(glyph);const desc=el('div','tile-wrap');const labels=el('div');labels.append(el('b','',t.name||this.name(t.entity)),el('small','',missing?'Niedostępne':({on:'Włączone',off:'Wyłączone',open:'Otwarte',closed:'Zamknięte',opening:'Otwieranie',closing:'Zamykanie',home:'W domu',not_home:'Poza domem'}[s?.state]||s?.state||'Brak danych')+(s?.attributes?.unit_of_measurement?' '+s.attributes.unit_of_measurement:'')));desc.append(labels);
+        if(domain==='media_player'&&!missing){
+          const a=s.attributes||{},title=[a.media_title,a.media_artist].filter(x=>typeof x==='string'&&x.trim()).join(' · '),app=typeof a.app_name==='string'?a.app_name:typeof a.source==='string'?a.source:'';
+          if(title)desc.append(el('span','media-title',title));
+          if(app)desc.append(el('span','media-app',app));
+          const duration=Number(a.media_duration),position=Number(a.media_position);
+          if(s.state==='playing'&&Number.isFinite(duration)&&duration>0&&Number.isFinite(position)&&position>=0){
+            const progress=Math.min(100,Math.max(0,position/duration*100));
+            const clock=seconds=>{const n=Math.floor(seconds),h=Math.floor(n/3600),m=Math.floor(n%3600/60),sec=String(n%60).padStart(2,'0');return h?h+':'+String(m).padStart(2,'0')+':'+sec:m+':'+sec};
+            const track=el('div','media-progress');track.setAttribute('role','progressbar');track.setAttribute('aria-label','Postęp odtwarzania');track.setAttribute('aria-valuemin','0');track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',String(Math.round(progress)));
+            const fill=el('span','media-progress-fill');fill.style.width=progress+'%';track.append(fill);
+            const times=el('div','media-times');times.append(el('span','',clock(position)),el('span','',clock(duration)));desc.append(track,times)
+          }
+          if(Number.isFinite(Number(a.volume_level))&&a.volume_level!==null&&a.volume_level!==undefined)desc.append(el('span','media-volume','Głośność · '+Math.round(Math.max(0,Math.min(1,Number(a.volume_level)))*100)+'%'));
+          const artUrl=this.mediaArtwork(a);if(artUrl){const art=document.createElement('img');art.className='media-art';art.alt='Okładka odtwarzanych multimediów';art.loading='lazy';art.src=artUrl;art.addEventListener('error',()=>art.remove());desc.append(art)}
+          if(!this._editLayout){
+            const features=Number(a.supported_features)||0,controls=el('div','tile-controls');
+            const add=(label,service,enabled=true)=>{const b=el('button','',label);b.type='button';b.disabled=!enabled;b.addEventListener('click',e=>{e.stopPropagation();if(!b.disabled)Promise.resolve(this._hass?.callService?.('media_player',service,{entity_id:t.entity})).catch(err=>console.error('VELTO media control failed',err))});controls.append(b)};
+            add('⏮','media_previous_track',Boolean(features&16));add(s.state==='playing'?'Ⅱ':'▶',s.state==='playing'?'media_pause':'media_play',Boolean(features&(s.state==='playing'?1:16384)));add('⏭','media_next_track',Boolean(features&32));
+            if(controls.children.length)desc.append(controls)
+          }
+        }
+        if(domain==='vacuum'&&!missing){
+          const a=s.attributes||{},meta=el('div','device-meta');
+          if(a.battery_level!==undefined)meta.append(el('span','',String(a.battery_level)+'% bateria'));
+          if(a.status)meta.append(el('span','',String(a.status)));
+          if(meta.children.length)desc.append(meta);
+          if(!this._editLayout){const controls=el('div','tile-controls');
+            const add=(label,service,enabled=true)=>{const b=el('button','',label);b.type='button';b.disabled=!enabled;b.addEventListener('click',e=>{e.stopPropagation();if(!b.disabled)Promise.resolve(this._hass?.callService?.('vacuum',service,{entity_id:t.entity})).catch(err=>console.error('VELTO vacuum control failed',err))});controls.append(b)};
+            add('▶','start',s.state!=='cleaning');add('Ⅱ','pause',s.state==='cleaning');add('⌂','return_to_base',s.state!=='docked');desc.append(controls)
+          }
+        }
+        if(domain==='climate'&&!missing){
+          const a=s.attributes||{},meta=el('div','device-meta'),current=Number(a.current_temperature),target=Number(a.temperature);
+          if(Number.isFinite(current))meta.append(el('span','','Teraz '+current.toLocaleString('pl-PL',{maximumFractionDigits:1})+'°'));
+          if(Number.isFinite(target))meta.append(el('span','','Cel '+target.toLocaleString('pl-PL',{maximumFractionDigits:1})+'°'));
+          if(a.hvac_action)meta.append(el('span','',String(a.hvac_action)));
+          if(meta.children.length)desc.append(meta)
+        }
+        if(domain==='cover'&&!missing){
+          const a=s.attributes||{},position=Number(a.current_position),meta=el('div','device-meta');
+          if(Number.isFinite(position))meta.append(el('span','',Math.round(position)+'% otwarcia'));
+          if(meta.children.length)desc.append(meta);
+          if(!this._editLayout){const features=Number(a.supported_features)||0,controls=el('div','tile-controls');
+            const add=(label,service,enabled=true)=>{const b=el('button','',label);b.type='button';b.disabled=!enabled;b.addEventListener('click',e=>{e.stopPropagation();if(!b.disabled)Promise.resolve(this._hass?.callService?.('cover',service,{entity_id:t.entity})).catch(err=>console.error('VELTO cover control failed',err))});controls.append(b)};
+            add('↑','open_cover',Boolean(features&1)||features===0);add('■','stop_cover',Boolean(features&8));add('↓','close_cover',Boolean(features&2)||features===0);desc.append(controls)
+          }
+        }
+        if(domain==='camera'&&!missing&&tileSize!=='small'){
+          const a=s.attributes||{},art=this.mediaArtwork(a),src=art?.startsWith('/')?art:'/api/camera_proxy/'+encodeURIComponent(t.entity);
+          const preview=document.createElement('img');preview.className='camera-tile-art';preview.alt='Podgląd '+(t.name||this.name(t.entity));preview.loading='lazy';preview.src=src;
+          preview.addEventListener('error',()=>{preview.hidden=true});desc.append(preview)
+        }
+        if(missing){const status=el('span','tile-status tile-status-offline','Brak połączenia');status.setAttribute('aria-hidden','true');desc.append(status)}
+        else if(on&&['light','switch','fan','input_boolean','cover','media_player','vacuum'].includes(domain)){const status=el('span','tile-status tile-status-on',domain==='cover'?'Otwarta':domain==='media_player'?'Odtwarzanie':domain==='vacuum'?'Pracuje':'Aktywne');status.setAttribute('aria-hidden','true');desc.append(status)}
+        if(domain==='light'&&!missing&&((Array.isArray(s.attributes?.supported_color_modes)&&s.attributes.supported_color_modes.some(mode=>mode!=='onoff'&&mode!=='unknown'))||s.attributes?.supported_features&1)){
+          const brightness=Number(s.attributes?.brightness),pct=Number.isFinite(brightness)?Math.round(Math.max(0,Math.min(255,brightness))/255*100):0,slider=document.createElement('input'),brightnessValue=el('span','brightness-label');
+          slider.type='range';slider.className='brightness';slider.min='1';slider.max='100';slider.value=String(on?Math.max(1,pct):1);slider.setAttribute('aria-label','Jasność '+(t.name||this.name(t.entity)));
+          const updateBrightness=()=>{brightnessValue.textContent='Jasność · '+slider.value+'%';slider.style.setProperty('--brightness',slider.value+'%')};
+          updateBrightness();
+          for(const event of ['pointerdown','pointerup','click','keydown','keyup'])slider.addEventListener(event,e=>e.stopPropagation());
+          slider.addEventListener('input',e=>{e.stopPropagation();updateBrightness()});
+          slider.addEventListener('change',e=>{
+            e.stopPropagation();const value=Number(slider.value),api=this._hass;
+            if(!api?.callService||!Number.isFinite(value)||value<1||value>100)return;
+            Promise.resolve().then(()=>api.callService('light','turn_on',{entity_id:t.entity,brightness_pct:value})).catch(err=>console.error('VELTO brightness failed',err))
+          });
+          desc.append(slider,brightnessValue);
+        }
+        tile.append(desc);
+        if(this._editLayout&&!room._highlights){
+          tile.draggable=true;
+          const ids=visibleEntities.map(v=>typeof v==='string'?v:v.entity);
+          const index=ids.indexOf(t.entity),actions=el('div','tile-edit-actions');
+          const move=(offset,label)=>{
+            const button=el('button','',label);button.type='button';
+            button.setAttribute('aria-label',(offset<0?'Przesuń wcześniej: ':'Przesuń później: ')+(t.name||this.name(t.entity)));
+            button.disabled=index+offset<0||index+offset>=ids.length;
+            button.addEventListener('click',e=>{e.stopPropagation();if(!button.disabled)this.moveTile(room.id,t.entity,ids[index+offset])});
+            actions.append(button)
+          };
+          move(-1,'←');move(1,'→');tile.append(actions);
+          const sizes=el('div','tile-size-actions');
+          for(const [value,label] of [['small','S'],['medium','M'],['large','L']]){
+            const b=el('button',tileSize===value?'selected':'',label);b.type='button';b.setAttribute('aria-label','Rozmiar '+label+': '+(t.name||this.name(t.entity)));b.setAttribute('aria-pressed',String(tileSize===value));
+            b.addEventListener('click',e=>{e.stopPropagation();if(tileSize!==value)this.applyTileSize(room.id,t.entity,value)});sizes.append(b)
+          }
+          tile.append(sizes);
+          // Touch reordering: hold briefly, then drag over another tile in the same room.
+          let touchHold=null,touchDrag=null;
+          const clearTouch=()=>{if(touchHold!==null){clearTimeout(touchHold);touchHold=null}};
+          tile.addEventListener('pointerdown',e=>{
+            if(e.pointerType!=='touch'||!e.isPrimary||e.target?.closest?.('button,input'))return;
+            clearTouch();touchDrag={pointer:e.pointerId,x:e.clientX,y:e.clientY,active:false,target:null};
+            touchHold=setTimeout(()=>{
+              touchHold=null;
+              if(!touchDrag)return;
+              touchDrag.active=true;tile.classList.add('touch-dragging');
+              try{tile.setPointerCapture(touchDrag.pointer)}catch{}
+            },350);
+          });
+          tile.addEventListener('pointermove',e=>{
+            if(!touchDrag||e.pointerId!==touchDrag.pointer)return;
+            if(!touchDrag.active){
+              if(Math.hypot(e.clientX-touchDrag.x,e.clientY-touchDrag.y)>12){clearTouch();touchDrag=null}
+              return
+            }
+            const hit=root.elementFromPoint?.(e.clientX,e.clientY)?.closest?.('.tile');
+            const target=hit?.dataset?.entity&&hit!==tile&&hit.closest('.tiles')===grid?hit:null;
+            if(touchDrag.target!==target){
+              touchDrag.target?.classList.remove('drag-over');
+              touchDrag.target=target;target?.classList.add('drag-over')
+            }
+          });
+          const finishTouch=e=>{
+            if(!touchDrag||e.pointerId!==touchDrag.pointer)return;
+            clearTouch();
+            const target=touchDrag.target,active=touchDrag.active;
+            target?.classList.remove('drag-over');tile.classList.remove('touch-dragging');
+            touchDrag=null;
+            if(active&&e.type==='pointerup'&&target)this.moveTile(room.id,t.entity,target.dataset.entity);
+          };
+          tile.addEventListener('pointerup',finishTouch);
+          tile.addEventListener('pointercancel',finishTouch);
+          tile.addEventListener('dragstart',e=>{e.dataTransfer?.setData('text/plain',t.entity);if(e.dataTransfer)e.dataTransfer.effectAllowed='move';this._dragTile={room:room.id,id:t.entity}});
+          tile.addEventListener('dragover',e=>{if(this._dragTile?.room===room.id&&this._dragTile.id!==t.entity){e.preventDefault();tile.classList.add('drag-over')}});
+          tile.addEventListener('dragleave',()=>tile.classList.remove('drag-over'));
+          tile.addEventListener('drop',e=>{e.preventDefault();tile.classList.remove('drag-over');if(this._dragTile?.room===room.id)this.moveTile(room.id,this._dragTile.id,t.entity);this._dragTile=null});
+          tile.addEventListener('dragend',()=>{this._dragTile=null;tile.classList.remove('drag-over')});
+        }
+        let timer,held=false,dragged=false,origin=null;
+        const stopHold=()=>{clearTimeout(timer);timer=null};
+        tile.addEventListener('pointerdown',e=>{
+          if(this._editLayout||e.button!==0||e.target?.closest?.('input,button'))return;
+          stopHold();held=false;dragged=false;origin={x:e.clientX,y:e.clientY};
+          timer=setTimeout(()=>{timer=null;if(!dragged){held=true;this.action(t.entity,'more')}},600)
+        });
+        tile.addEventListener('pointermove',e=>{
+          if(origin&&Math.hypot(e.clientX-origin.x,e.clientY-origin.y)>10){dragged=true;stopHold()}
+        });
+        tile.addEventListener('pointerup',stopHold);
+        tile.addEventListener('pointercancel',()=>{dragged=true;stopHold()});
+        tile.addEventListener('pointerleave',stopHold);
+        tile.addEventListener('click',e=>{
+          if(this._editLayout||e.target?.closest?.('input,button'))return;
+          if(held||dragged){e.preventDefault();e.stopPropagation();held=false;dragged=false;origin=null;return}
+          origin=null;this.action(t.entity,missing||domain==='media_player'||domain==='vacuum'||domain==='camera'?'more':'toggle')
+        });
+        tile.addEventListener('keydown',e=>{if(e.target!==tile||this._editLayout)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();this.action(t.entity,missing||domain==='media_player'||domain==='vacuum'||domain==='camera'?'more':'toggle')}else if(e.key==='F2'){e.preventDefault();this.action(t.entity,'more')}});
+        tile.addEventListener('contextmenu',e=>{if(this._editLayout)return;e.preventDefault();stopHold();if(!held){held=true;this.action(t.entity,'more')}});
+        grid.append(tile)}
+      if(!grid.children.length)grid.append(el('div','empty','Brak urządzeń. Dodaj je w edytorze wizualnym lub przypisz do obszaru w Home Assistant.'));main.append(grid)}
+    if((c.weather?.entities||this.weatherForecastEntity())&&(this._room==='all'||c.weather?.show_in_rooms)){
+      const wh=c.weather?.entities||{},forecastEntity=this.weatherForecastEntity(),hasLocalSensors=Object.values(wh).some(Boolean),sec=el('div','section-head');sec.append(el('h3','',c.weather?.title||'Pogoda lokalna'),el('small','',c.weather?.source||(hasLocalSensors?'InPost':'Home Assistant')));main.append(sec);
+      const w=el('section','weather'),lead=el('div'),weatherState=forecastEntity?this.entity(forecastEntity):null;
+      const sensorTemp=this.weatherNumber(wh.temperature),nativeTemp=Number(weatherState?.attributes?.temperature),temp=sensorTemp!==null?sensorTemp:(Number.isFinite(nativeTemp)?nativeTemp:null);
+      lead.append(el('div','eyebrow','Na zewnątrz'),el('div','temperature',temp!==null?temp.toLocaleString('pl-PL',{maximumFractionDigits:1})+'°C':'—°C'));
+      const a=this.text(wh.air_index),airKey=typeof a==='string'?a.trim().toUpperCase().replace(/[\s-]+/g,'_'):null,labels={VERY_GOOD:'Bardzo dobre powietrze',GOOD:'Dobre powietrze',MODERATE:'Umiarkowane powietrze',BAD:'Zła jakość powietrza',VERY_BAD:'Bardzo zła jakość powietrza'};const air=el('div','air '+(airKey==='BAD'||airKey==='VERY_BAD'?'air-bad':airKey==='MODERATE'?'air-moderate':airKey==='GOOD'||airKey==='VERY_GOOD'?'air-good':'air-unknown'),a?labels[airKey]||'Brak oceny':this.weatherConditionLabel(weatherState?.state));air.setAttribute('role','status');lead.append(air);w.append(lead);
+      const metrics=el('div','metrics');for(const [key,label,unit] of [['humidity','Wilgotność','%'],['pressure','Ciśnienie','hPa'],['pm25','PM2.5','µg/m³'],['pm10','PM10','µg/m³']]){let num=this.weatherNumber(wh[key]);if(num===null&&weatherState&&['humidity','pressure'].includes(key)){const native=Number(weatherState.attributes?.[key]);if(Number.isFinite(native))num=native}const v=num!==null?num.toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit:'—';const m=el('div','metric');m.append(el('small','',label),el('strong','',v));metrics.append(m)}w.append(metrics);
+      if(forecastEntity&&c.weather?.show_forecast!==false){
+        const forecast=el('div','weather-forecast'),head=el('div','forecast-head');head.append(el('strong','','Prognoza na 7 dni'),el('small','',this.name(forecastEntity)));forecast.append(head);
+        if(this._weatherForecast.length){
+          const strip=el('div','forecast-strip'),today=new Date(),todayKey=[today.getFullYear(),today.getMonth(),today.getDate()].join('-');
+          for(const item of this._weatherForecast.slice(0,7)){
+            const date=new Date(item.datetime),key=[date.getFullYear(),date.getMonth(),date.getDate()].join('-'),day=el('div','forecast-day');
+            const name=key===todayKey?'Dziś':date.toLocaleDateString('pl-PL',{weekday:'short'});
+            day.title=this.weatherConditionLabel(item.condition);
+            day.append(el('div','forecast-name',name),el('div','forecast-symbol',this.weatherConditionSymbol(item.condition)));
+            const high=item.temperature!==null?item.temperature.toLocaleString('pl-PL',{maximumFractionDigits:0})+'°':'—',low=item.templow!==null?item.templow.toLocaleString('pl-PL',{maximumFractionDigits:0})+'°':'';
+            day.append(el('div','forecast-temp',high));
+            if(low)day.append(el('div','forecast-low','min '+low));
+            if(item.precipitation_probability!==null)day.append(el('div','forecast-rain','opady '+Math.round(item.precipitation_probability)+'%'));
+            strip.append(day)
+          }
+          forecast.append(strip)
+        }else forecast.append(el('div','forecast-status',this._weatherForecastError?'Prognoza dzienna niedostępna dla tej encji pogodowej.':'Ładowanie prognozy 7-dniowej…'));
+        w.append(forecast)
+      }
+      main.append(w)}
+    if((c.calendar?.entity||c.calendar?.entities?.length)&&(this._room==='all'||c.calendar.show_in_rooms)){
+      const cfg=c.calendar,section=el('section','calendar-section'),head=el('div','section-head');
+      head.append(el('h3','',cfg.title||'Najbliższe wydarzenia'),el('small','',cfg.days?cfg.days+' dni':'14 dni'));const refresh=el('button','calendar-refresh','Odśwież');refresh.type='button';refresh.disabled=!!this._calendarLoading;refresh.setAttribute('aria-label','Odśwież wydarzenia kalendarza');refresh.addEventListener('click',()=>{if(!this._calendarLoading)this.loadCalendar(true)});head.append(refresh);section.append(head);
+      const events=this._calendarEvents.slice(0,Math.max(1,Math.min(30,Number(cfg.limit)||6)));
+      if(this._calendarError)section.append(el('div','registry-warning',events.length?'Nie udało się pobrać części kalendarzy. Wyświetlam dostępne wydarzenia.':'Nie udało się pobrać kalendarza. Sprawdź integrację i uprawnienia w Home Assistant.'));
+      else if(!events.length)section.append(el('div','calendar-empty',this._calendarLoading?'Ładowanie wydarzeń…':'Brak nadchodzących wydarzeń.'));
+      const list=el('div','calendar-list');
+      for(const event of events){
+        const date=this.eventDate(event.start),allDay=this.eventAllDay(event.start),item=el('div','calendar-event');
+        const dateBox=el('div','calendar-date');
+        dateBox.append(el('b','',date.toLocaleDateString('pl-PL',{day:'2-digit'})),el('small','',date.toLocaleDateString('pl-PL',{month:'short'})));
+        const content=el('div','calendar-copy');content.append(el('strong','',event.summary||'Wydarzenie'));
+        const when=allDay?'Cały dzień':date.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+        const source=event.calendar?this.name(event.calendar):'';
+        content.append(el('small','',date.toLocaleDateString('pl-PL',{weekday:'short'})+' · '+when+(source?' · '+source:'')));
+        if(event.location)content.append(el('small','calendar-location',event.location));
+        item.append(dateBox,content);list.append(item)
+      }
+      section.append(list);main.append(section)
+    }
+    main.append(el('div','hint','Przytrzymaj kafelek lub kliknij prawym przyciskiem, aby otworzyć szczegóły urządzenia.'));shell.append(main);root.append(shell);this.updateFullscreenButton();if(openDialog)root.append(openDialog)
+  }
+}
+if(!customElements.get('velto-dashboard'))customElements.define('velto-dashboard',VeltoDashboard);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(c=>c.type==='velto-dashboard'))window.customCards.push({type:'velto-dashboard',name:'VELTO Dashboard',description:'Pokoje, urządzenia, obecność i lokalna pogoda w jednym panelu'});
+
+
+/* Visual configuration editor: rooms, entities, presence. Weather YAML remains supported. */
+class VeltoDashboardEditor extends HTMLElement {
+  constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryError=null}
+  setConfig(c){this._config={...c,rooms:Array.isArray(c.rooms)?c.rooms:[]};this.render()}
+  set hass(h){
+    const oldIds=Object.keys(this._hass?.states||{}),newIds=Object.keys(h?.states||{});
+    const previousConnection=this._hass?.connection;
+    this._hass=h;
+    if(previousConnection&&h?.connection&&previousConnection!==h.connection){this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryError=null}
+    this.loadSetupRegistry();
+    if(!this.shadowRoot?.children.length||oldIds.length!==newIds.length)this.render()
+  }
+  async loadSetupRegistry(force=false){
+    const connection=this._hass?.connection;
+    if(!connection?.sendMessagePromise)return;
+    if(!force&&this._setupRegistryConnection===connection&&this._setupRegistry)return;
+    if(this._setupRegistryLoading)return;
+    this._setupRegistryLoading=true;this._setupRegistryError=null;
+    try{
+      const [areas,entities,devices]=await Promise.all([
+        connection.sendMessagePromise({type:'config/area_registry/list'}),
+        connection.sendMessagePromise({type:'config/entity_registry/list'}),
+        connection.sendMessagePromise({type:'config/device_registry/list'})
+      ]);
+      if(this._hass?.connection!==connection)return;
+      this._setupRegistry={areas:Array.isArray(areas)?areas:[],entities:Array.isArray(entities)?entities:[],devices:Array.isArray(devices)?devices:[]};
+      this._setupRegistryConnection=connection;this._setupRegistryError=null;
+    }catch(error){
+      if(this._hass?.connection===connection){this._setupRegistryError=error;console.warn('VELTO setup discovery unavailable',error)}
+    }finally{
+      this._setupRegistryLoading=false;
+      if(this.isConnected)this.render()
+    }
+  }
+  setupSummary(){
+    const states=this._hass?.states||{},registry=this._setupRegistry;
+    const people=Object.keys(states).filter(id=>id.startsWith('person.'));
+    const trackers=Object.keys(states).filter(id=>id.startsWith('device_tracker.'));
+    const calendars=Object.keys(states).filter(id=>id.startsWith('calendar.'));
+    const weathers=Object.keys(states).filter(id=>id.startsWith('weather.')&&!['unknown','unavailable'].includes(states[id]?.state));
+    const cameras=Object.keys(states).filter(id=>id.startsWith('camera.'));
+    const media=Object.keys(states).filter(id=>id.startsWith('media_player.'));
+    const lights=Object.keys(states).filter(id=>id.startsWith('light.'));
+    if(!registry)return {areas:null,assigned:null,people,trackers,calendars,weathers,cameras,media,lights};
+    const deviceArea=new Map(registry.devices.filter(d=>d?.id).map(d=>[d.id,d.area_id]));
+    const supported=new Set(['light','switch','fan','cover','climate','sensor','binary_sensor','media_player','lock','vacuum','scene','script','button','input_boolean','automation','humidifier','water_heater','alarm_control_panel','remote','select','number','input_select','input_number','input_button','weather','camera']);
+    const includeTechnical=!!this._config.show_diagnostics;
+    const visible=e=>e?.entity_id&&!e.disabled_by&&!e.hidden_by&&(includeTechnical||!['diagnostic','config'].includes(e.entity_category))&&states[e.entity_id]&&supported.has(e.entity_id.split('.')[0]);
+    const assigned=registry.entities.filter(e=>visible(e)&&(e.area_id||deviceArea.get(e.device_id))).length;
+    const usedAreas=new Set(registry.entities.filter(visible).map(e=>e.area_id||deviceArea.get(e.device_id)).filter(Boolean));
+    return {areas:usedAreas.size,registeredAreas:registry.areas.length,assigned,people,trackers,calendars,weathers,cameras,media,lights}
+  }
+  commit(c){this._config=c;this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:c},bubbles:true,composed:true}));this.render()}
+  render(){
+    const root=this.shadowRoot;if(!root)return;root.replaceChildren();
+    const style=document.createElement('style');style.textContent=`
+:host{display:block;font:inherit;color:var(--primary-text-color,#333)}*{box-sizing:border-box}
+.wrap{display:grid;gap:14px;padding:8px 0}.field{display:grid;gap:5px;font-size:13px;font-weight:600}
+input,select,button{font:inherit;min-height:38px;border-radius:10px;padding:8px 10px;border:1px solid var(--divider-color,#ccc);background:var(--card-background-color,#fff);color:inherit;max-width:100%}
+input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.primary{background:var(--primary-color,#c18c43);color:#fff;border:0}
+.room{border:1px solid var(--divider-color,#ddd);border-radius:15px;padding:12px;display:grid;gap:12px}.row{display:grid;grid-template-columns:minmax(0,1fr) 90px 42px;gap:7px;align-items:center}.row small{display:block;font-size:11px;opacity:.65;overflow-wrap:anywhere}
+.muted{font-size:12px;opacity:.7}.section{font-weight:750;margin:5px 0 0}
+.setup{padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:18px;background:var(--card-background-color,#fff);display:grid;gap:13px}.setup h3{margin:0;font-size:19px}.setup p{margin:0;line-height:1.45}.setup-ok{font-size:12px;font-weight:700;color:var(--success-color,#4b8b54)}.advanced-toggle{background:transparent}
+.discovery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.discovery div{padding:10px;border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#fff) 80%,var(--primary-color,#c18c43) 8%);text-align:center}.discovery b{display:block;font-size:18px}.discovery small{font-size:10px;opacity:.7}.setup-status{font-size:12px;padding:9px 10px;border-radius:10px;background:var(--secondary-background-color,#f5f5f5)}@media(max-width:520px){.discovery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+`;root.append(style);
+    const wrap=document.createElement('div');wrap.className='wrap';root.append(wrap);
+    const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n};
+    const field=(label,value,fn)=>{const l=node('label',undefined,'field');l.append(node('span',label));const i=document.createElement('input');i.value=value||'';i.addEventListener('change',()=>fn(i.value));l.append(i);return l};
+    const button=(label,fn,cls)=>{const b=node('button',label,cls);b.type='button';b.addEventListener('click',fn);return b};
+    const choose=(options,value,fn)=>{const s=document.createElement('select');for(const [v,label] of options){const o=document.createElement('option');o.value=v;o.textContent=label;s.append(o)}s.value=value||'';s.addEventListener('change',()=>fn(s.value));return s};
+    const c=this._config,rooms=c.rooms||[],set=(patch)=>this.commit({...this._config,...patch});
+    const summary=this.setupSummary();
+    const setup=node('section',undefined,'setup');
+    setup.append(node('h3','Uruchom VELTO'));
+    setup.append(node('p','Minimum konfiguracji: nadaj nazwę dashboardu i wybierz sposób tworzenia pomieszczeń. Resztę możesz zmienić później.','muted'));
+    if(this._setupRegistryLoading)setup.append(node('div','Wykrywam strukturę Home Assistant…','setup-status'));
+    else if(this._setupRegistryError){
+      const status=node('div',undefined,'setup-status');status.append(document.createTextNode('Nie udało się odczytać Areas. '),button('Spróbuj ponownie',()=>this.loadSetupRegistry(true)));setup.append(status)
+    }else if(summary.areas!==null){
+      const found=node('div',undefined,'discovery');
+      for(const [value,label] of [[summary.areas,'pomieszczeń'],[summary.assigned,'urządzeń'],[summary.lights.length,'świateł'],[summary.media.length,'media'],[summary.cameras.length,'kamer'],[summary.people.length,'osób']]){
+        const item=node('div');item.append(node('b',String(value)),node('small',label));found.append(item)
+      }
+      setup.append(found);
+      if(summary.areas===0||summary.assigned===0)setup.append(node('div','VELTO nie znalazł urządzeń przypisanych do Areas. Przypisz urządzenia do pomieszczeń w Home Assistant albo wybierz tryb ręczny.','setup-status'))
+      else setup.append(node('div','✓ Struktura Home Assistant jest gotowa do automatycznego utworzenia dashboardu.','setup-ok'))
+    }
+    setup.append(field('Nazwa domu / dashboardu',c.title||'Mój dom',v=>set({title:v||'Mój dom'})));
+    const modeLabel=node('label',undefined,'field');modeLabel.append(node('span','Pomieszczenia'));
+    modeLabel.append(choose([['auto','Automatycznie z Home Assistant (zalecane)'],['manual','Utworzę ręcznie']],c.auto_areas===false?'manual':'auto',v=>set({auto_areas:v==='auto',hide_empty_rooms:v==='auto'?true:c.hide_empty_rooms,rooms:Array.isArray(c.rooms)?c.rooms:[]})));setup.append(modeLabel);
+    const themeQuick=node('label',undefined,'field');themeQuick.append(node('span','Wygląd'));
+    themeQuick.append(choose([['auto','Automatycznie jak Home Assistant'],['light','Jasny'],['dark','Ciemny']],c.theme||'auto',v=>set({theme:v})));setup.append(themeQuick);
+    const quickPresence=[...summary.people,...summary.trackers];
+    if(quickPresence.length){
+      const presence=c.presence||{},presenceLabel=node('label',undefined,'field');presenceLabel.append(node('span','Obecność na górnym pasku (opcjonalnie)'));
+      presenceLabel.append(choose([['','Bez obecności'],...quickPresence.map(id=>[id,(this._hass?.states?.[id]?.attributes?.friendly_name||id)+' · '+id])],presence.entity||'',v=>set({presence:{...presence,entity:v,name:v?(this._hass?.states?.[v]?.attributes?.friendly_name||presence.name||'Domownik'):''}})));
+      setup.append(presenceLabel)
+    }
+    if(summary.calendars.length){
+      const cal=c.calendar||{},selected=Array.isArray(cal.entities)?cal.entities:cal.entity?[cal.entity]:[],calendarLabel=node('label',undefined,'field');calendarLabel.append(node('span','Kalendarz na ekranie głównym (opcjonalnie)'));
+      calendarLabel.append(choose([['','Bez kalendarza'],...summary.calendars.map(id=>[id,(this._hass?.states?.[id]?.attributes?.friendly_name||id)+' · '+id])],selected[0]||'',v=>set({calendar:v?{...cal,entity:'',entities:[v],days:cal.days||14}:{...cal,entity:'',entities:[]}})));
+      setup.append(calendarLabel)
+    }
+    if(summary.weathers.length){
+      const weather=c.weather||{},weatherLabel=node('label',undefined,'field');weatherLabel.append(node('span','Prognoza pogody 7 dni'));
+      weatherLabel.append(choose([['','Automatycznie (gdy dostępna jest jedna)'],...summary.weathers.map(id=>[id,(this._hass?.states?.[id]?.attributes?.friendly_name||id)+' · '+id])],weather.forecast_entity||'',v=>set({weather:{...weather,forecast_entity:v,show_forecast:true}})));
+      setup.append(weatherLabel)
+    }
+    if(c.auto_areas!==false)setup.append(node('div','✓ VELTO automatycznie użyje Areas i przypisanych do nich urządzeń.','setup-ok'));
+    setup.append(button(this._advanced?'Ukryj ustawienia zaawansowane':'Pokaż ustawienia zaawansowane',()=>{this._advanced=!this._advanced;this.render()},'advanced-toggle'));
+    wrap.append(setup);
+    if(!this._advanced){
+      if(c.auto_areas===false&&!rooms.length){
+        const manual=node('div',undefined,'actions');manual.append(button('＋ Dodaj pierwszy pokój',()=>{this._advanced=true;const next=[{id:'room_'+Date.now(),name:'Nowy pokój',icon:'home',entities:[]}];this._selectedRoom=0;set({rooms:next})},'primary'));wrap.append(manual)
+      }
+      return
+    }
+    wrap.append(field('Tytuł dashboardu',c.title||'Mój dom',v=>set({title:v})));
+    const auto=node('label',undefined,'field');const autoLabel=node('span','Automatycznie wykrywaj pomieszczenia i urządzenia z Home Assistant');const autoCheck=document.createElement('input');autoCheck.type='checkbox';autoCheck.checked=!!c.auto_areas;autoCheck.style.width='auto';autoCheck.addEventListener('change',()=>set({auto_areas:autoCheck.checked}));auto.append(autoLabel,autoCheck);wrap.append(auto);
+    const hide=node('label',undefined,'field');hide.append(node('span','Ukryj puste pokoje'));const hideCheck=document.createElement('input');hideCheck.type='checkbox';hideCheck.style.width='auto';hideCheck.checked=!!c.hide_empty_rooms;hideCheck.addEventListener('change',()=>set({hide_empty_rooms:hideCheck.checked}));hide.append(hideCheck);wrap.append(hide);
+    const themeLabel=node('label',undefined,'field');themeLabel.append(node('span','Motyw VELTO'));
+    themeLabel.append(choose([['light','Jasny'],['dark','Ciemny'],['auto','Automatyczny (motyw Home Assistant)']],c.theme||'light',v=>set({theme:v})));wrap.append(themeLabel);
+    const smart=node('label',undefined,'field');smart.append(node('span','Inteligentny układ automatycznych kafelków'));
+    const smartCheck=document.createElement('input');smartCheck.type='checkbox';smartCheck.style.width='auto';smartCheck.checked=c.smart_layout!==false;smartCheck.addEventListener('change',()=>set({smart_layout:smartCheck.checked}));smart.append(smartCheck);wrap.append(smart);
+    const diag=node('label',undefined,'field');diag.append(node('span','Pokaż encje diagnostyczne i konfiguracyjne'));
+    const diagCheck=document.createElement('input');diagCheck.type='checkbox';diagCheck.style.width='auto';diagCheck.checked=!!c.show_diagnostics;diagCheck.addEventListener('change',()=>set({show_diagnostics:diagCheck.checked}));diag.append(diagCheck);wrap.append(diag);
+    const maxAuto=node('label',undefined,'field');maxAuto.append(node('span','Maksymalnie automatycznych urządzeń w pokoju'));
+    maxAuto.append(choose([['12','12 — bardzo czysto'],['24','24 — zalecane'],['40','40 — dużo'],['60','60 — maksimum']],String(c.max_auto_entities||24),v=>set({max_auto_entities:Number(v)})));wrap.append(maxAuto);
+    wrap.append(node('div','Zapisywanie układu kafelków','section'));
+    const persistence=node('label',undefined,'field');persistence.append(node('span','Gdzie zapisywać przeciągnięty układ'));
+    persistence.append(choose([['hybrid','Home Assistant + lokalny backup (zalecane)'],['config','Tylko konfiguracja Home Assistant'],['local','Tylko na tym urządzeniu']],c.layout_persistence||'hybrid',v=>set({layout_persistence:v})));wrap.append(persistence);
+    wrap.append(field('ID układu (opcjonalnie, dla wielu dashboardów)',c.layout_id||'',v=>set({layout_id:v.trim()})));
+    wrap.append(node('p','Tryb hybrydowy wysyła zmianę do Lovelace i równocześnie zachowuje kopię w tej przeglądarce. Dzięki temu kolejność kafelków może przetrwać odświeżenie nawet wtedy, gdy dany widok HA nie zapisze config-changed.','muted'));
+    const roomControls=node('label',undefined,'field');roomControls.append(node('span','Pokaż inteligentny pasek sterowania pokojem'));
+    const roomControlsCheck=document.createElement('input');roomControlsCheck.type='checkbox';roomControlsCheck.style.width='auto';roomControlsCheck.checked=c.room_controls!==false;roomControlsCheck.addEventListener('change',()=>set({room_controls:roomControlsCheck.checked}));roomControls.append(roomControlsCheck);wrap.append(roomControls);
+    const scenesQuick=node('label',undefined,'field');scenesQuick.append(node('span','Pokazuj sceny i skrypty jako szybkie akcje'));
+    const scenesQuickCheck=document.createElement('input');scenesQuickCheck.type='checkbox';scenesQuickCheck.style.width='auto';scenesQuickCheck.checked=c.scene_shortcuts!==false;scenesQuickCheck.addEventListener('change',()=>set({scene_shortcuts:scenesQuickCheck.checked}));scenesQuick.append(scenesQuickCheck);wrap.append(scenesQuick);
+    const highlightsToggle=node('label',undefined,'field');highlightsToggle.append(node('span','Pokaż sekcję „Najważniejsze” na ekranie głównym'));
+    const highlightsCheck=document.createElement('input');highlightsCheck.type='checkbox';highlightsCheck.style.width='auto';highlightsCheck.checked=c.show_home_highlights!==false;highlightsCheck.addEventListener('change',()=>set({show_home_highlights:highlightsCheck.checked}));highlightsToggle.append(highlightsCheck);wrap.append(highlightsToggle);
+    const highlightLimit=node('label',undefined,'field');highlightLimit.append(node('span','Liczba kafelków w „Najważniejsze”'));
+    highlightLimit.append(choose([['4','4'],['6','6'],['8','8 — zalecane'],['12','12']],String(c.home_highlight_limit||8),v=>set({home_highlight_limit:Number(v)})));wrap.append(highlightLimit);
+    wrap.append(node('div','Przypięte do „Najważniejsze”','section'));
+    const pinned=Array.isArray(c.home_favorites)?c.home_favorites.filter(id=>typeof id==='string'):[];
+    const favoriteDomains=new Set(['light','switch','fan','cover','climate','media_player','lock','vacuum','camera','input_boolean','alarm_control_panel','binary_sensor','sensor','weather']);
+    const favoriteIds=Object.keys(this._hass?.states||{}).filter(id=>favoriteDomains.has(id.split('.')[0])).sort();
+    const favoritePicker=choose([['','Wybierz urządzenie…'],...favoriteIds.filter(id=>!pinned.includes(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{});
+    wrap.append(favoritePicker);
+    wrap.append(button('＋ Przypnij urządzenie',()=>{if(favoritePicker.value)set({home_favorites:[...pinned,favoritePicker.value]})}));
+    for(const id of pinned){
+      const entry=node('div',undefined,'row'),label=node('div');
+      label.append(node('strong',this._hass?.states?.[id]?.attributes?.friendly_name||id),node('small',id));entry.append(label);
+      entry.append(node('span','Ulubione','muted'));
+      entry.append(button('×',()=>set({home_favorites:pinned.filter(item=>item!==id)})));
+      wrap.append(entry)
+    }
+    wrap.append(node('div','Pomieszczenia','section'));
+    const selector=choose(rooms.map((r,i)=>[String(i),r.name||r.id]),String(Math.min(this._selectedRoom,Math.max(rooms.length-1,0))),v=>{this._selectedRoom=Number(v);this.render()});
+    if(rooms.length)wrap.append(selector);
+    const bar=node('div',undefined,'actions');
+    bar.append(button('＋ Dodaj pokój',()=>{const next=[...rooms,{id:'room_'+Date.now(),name:'Nowy pokój',icon:'home',entities:[]}];this._selectedRoom=next.length-1;set({rooms:next})},'primary'));
+    if(rooms.length)bar.append(button('Usuń pokój',()=>{const next=rooms.filter((_,i)=>i!==this._selectedRoom);this._selectedRoom=Math.max(0,this._selectedRoom-1);set({rooms:next})}));
+    wrap.append(bar);
+    if(rooms.length){
+      const idx=Math.min(this._selectedRoom,rooms.length-1),room=rooms[idx],panel=node('div',undefined,'room');
+      const updateRoom=patch=>set({rooms:(this._config.rooms||[]).map((r,i)=>i===idx?{...r,...patch}:r)});
+      panel.append(field('Nazwa pokoju',room.name,v=>updateRoom({name:v})));
+      const iconLabel=node('label',undefined,'field');iconLabel.append(node('span','Ikona pomieszczenia'));
+      iconLabel.append(choose([['home','Dom'],['light','Światło'],['plug','Kuchnia / urządzenia'],['water','Łazienka'],['door','Garaż / wejście'],['sun','Ogród / taras'],['climate','Temperatura'],['fan','Wentylacja'],['camera','Kamera']],room.icon||'home',v=>updateRoom({icon:v})));panel.append(iconLabel);
+      panel.append(node('div','Urządzenia w pokoju','section'));
+      for(let i=0;i<(room.entities||[]).length;i++){
+        const raw=room.entities[i],item=typeof raw==='string'?{entity:raw}:raw,entry=node('div',undefined,'row');
+        const label=node('div');label.append(node('strong',item.name||this._hass?.states?.[item.entity]?.attributes?.friendly_name||item.entity),node('small',item.entity));entry.append(label);
+        entry.append(choose([['small','Mały'],['medium','Średni'],['large','Duży']],item.size||'small',v=>updateRoom({entities:room.entities.map((e,j)=>j===i?{...(typeof e==='string'?{entity:e}:e),size:v}:e)})));
+        entry.append(button('×',()=>updateRoom({entities:room.entities.filter((_,j)=>i!==j)})));
+        panel.append(entry);
+      }
+      const ids=Object.keys(this._hass?.states||{}).sort(),existing=new Set((room.entities||[]).map(e=>typeof e==='string'?e:e.entity));
+      const picker=choose([['','Wybierz urządzenie…'],...ids.filter(id=>!existing.has(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{});
+      panel.append(picker);
+      panel.append(button('＋ Dodaj urządzenie',()=>{if(picker.value)updateRoom({entities:[...(room.entities||[]),{entity:picker.value,size:'small'}]})},'primary'));
+      wrap.append(panel);
+    }
+    wrap.append(node('div','Obecność domownika','section'));
+    const trackers=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('person.')||id.startsWith('device_tracker.')).sort();
+    const presence=c.presence||{};
+    const presenceOptions=[['','Bez obecności'],...trackers.map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])];
+    if(presence.entity&&!trackers.includes(presence.entity))presenceOptions.push([presence.entity,presence.entity]);
+    wrap.append(choose(presenceOptions,presence.entity||'',v=>set({presence:{...presence,entity:v}})));
+    if(presence.entity)wrap.append(field('Nazwa domownika',presence.name||'',v=>set({presence:{...presence,name:v}})));
+    wrap.append(node('div','Kalendarz Google / Home Assistant','section'));
+    const calendars=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('calendar.')).sort();
+    const cal=c.calendar||{},selected=Array.isArray(cal.entities)?cal.entities:cal.entity?[cal.entity]:[];
+    const calOptions=[['','Wyłącz kalendarz'],...calendars.map(id=>[id,(this._hass.states[id].attributes.friendly_name||id)+' · '+id])];
+    for(const id of selected)if(!calendars.includes(id))calOptions.push([id,id]);
+    const calendarField=node('label',undefined,'field');calendarField.append(node('span','Dodaj kalendarz'));
+    const available=calOptions.filter(([id])=>!id||!selected.includes(id));
+    const calendarPicker=choose([['','Wybierz kalendarz…'],...available.filter(([id])=>id)],'',()=>{});
+    calendarField.append(calendarPicker);wrap.append(calendarField);
+    wrap.append(button('＋ Dodaj kalendarz',()=>{
+      const id=calendarPicker.value;if(!id||selected.includes(id))return;
+      set({calendar:{...this._config.calendar,entity:'',entities:[...selected,id]}})
+    }));
+    for(const id of selected){
+      const entry=node('div',undefined,'row'),label=node('div');
+      label.append(node('strong',this._hass?.states?.[id]?.attributes?.friendly_name||id),node('small',id));entry.append(label);
+      entry.append(node('span','Aktywny','muted'));
+      entry.append(button('×',()=>set({calendar:{...this._config.calendar,entity:'',entities:selected.filter(item=>item!==id)}})));
+      wrap.append(entry);
+    }
+    const calendarRooms=node('label',undefined,'field');calendarRooms.append(node('span','Pokazuj wydarzenia także w widokach pokoi'));
+    const calendarRoomsCheck=document.createElement('input');calendarRoomsCheck.type='checkbox';calendarRoomsCheck.checked=!!cal.show_in_rooms;calendarRoomsCheck.style.width='auto';
+    calendarRoomsCheck.addEventListener('change',()=>set({calendar:{...this._config.calendar,show_in_rooms:calendarRoomsCheck.checked}}));
+    calendarRooms.append(calendarRoomsCheck);wrap.append(calendarRooms);
+    wrap.append(field('Tytuł karty wydarzeń',cal.title||'Najbliższe wydarzenia',v=>set({calendar:{...this._config.calendar,title:v}})));
+    const daysField=node('label',undefined,'field');daysField.append(node('span','Ile dni do przodu?'));
+    daysField.append(choose([['7','7 dni'],['14','14 dni'],['30','30 dni'],['60','60 dni']],String(cal.days||14),v=>set({calendar:{...this._config.calendar,days:Number(v)}})));wrap.append(daysField);
+    wrap.append(node('p','Wybierz kalendarz udostępniony przez integrację Google Calendar w Home Assistant. Możesz dodać kilka kalendarzy bezpośrednio w edytorze. Wydarzenia zostaną połączone i uporządkowane chronologicznie.','muted'));
+    wrap.append(node('div','Pogoda i zaawansowane ustawienia','section'));
+    const weather=c.weather||{},current=weather.entities||{};
+    wrap.append(field('Tytuł pogody',weather.title||'Warunki na zewnątrz',v=>set({weather:{...this._config.weather,title:v}})));
+    const weatherEntities=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('weather.')).sort(),forecastCurrent=weather.forecast_entity||'';
+    const forecastSource=node('label',undefined,'field');forecastSource.append(node('span','Źródło prognozy 7-dniowej'));
+    forecastSource.append(choose([['','Automatycznie (jeśli jest jedna encja weather.*)'],...weatherEntities.map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],forecastCurrent,v=>set({weather:{...this._config.weather,forecast_entity:v}})));wrap.append(forecastSource);
+    const showForecast=node('label',undefined,'field');showForecast.append(node('span','Pokazuj prognozę na kolejne 7 dni'));
+    const showForecastCheck=document.createElement('input');showForecastCheck.type='checkbox';showForecastCheck.style.width='auto';showForecastCheck.checked=weather.show_forecast!==false;showForecastCheck.addEventListener('change',()=>set({weather:{...this._config.weather,show_forecast:showForecastCheck.checked}}));showForecast.append(showForecastCheck);wrap.append(showForecast);
+    const weatherRooms=node('label',undefined,'field');weatherRooms.append(node('span','Pokazuj pogodę także w widokach pokoi'));const weatherRoomsCheck=document.createElement('input');weatherRoomsCheck.type='checkbox';weatherRoomsCheck.style.width='auto';weatherRoomsCheck.checked=!!weather.show_in_rooms;weatherRoomsCheck.addEventListener('change',()=>set({weather:{...this._config.weather,show_in_rooms:weatherRoomsCheck.checked}}));weatherRooms.append(weatherRoomsCheck);wrap.append(weatherRooms);
+    const sensors=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('sensor.')).sort();
+    for(const [key,label] of [['temperature','Temperatura'],['humidity','Wilgotność'],['pressure','Ciśnienie'],['pm25','PM2.5'],['pm10','PM10'],['air_index','Jakość powietrza']]){
+      const currentId=current[key]||'',options=[['','Brak'],...sensors.map(id=>[id,(this._hass.states[id].attributes.friendly_name||id)+' · '+id])];
+      if(currentId&&!sensors.includes(currentId))options.push([currentId,currentId]);
+      const l=node('label',undefined,'field');l.append(node('span',label));
+      l.append(choose(options,currentId,v=>{
+        const old=this._config.weather||{};set({weather:{...old,entities:{...(old.entities||{}),[key]:v}}})
+      }));wrap.append(l)
+    }
+    wrap.append(node('p','Pola pogodowe można teraz konfigurować wizualnie. Zmiany zapisują się w YAML karty.','muted'));
+  }
+}
+if(!customElements.get('velto-dashboard-editor'))customElements.define('velto-dashboard-editor',VeltoDashboardEditor);
