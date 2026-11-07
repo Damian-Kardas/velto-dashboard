@@ -1,6 +1,6 @@
 /* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
 class VeltoDashboard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false}
   layoutStorageKey(config=this._config){
     const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
     const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
@@ -90,7 +90,7 @@ class VeltoDashboard extends HTMLElement {
       this._fullscreenListener=()=>this.updateFullscreenButton();
       document.addEventListener('fullscreenchange',this._fullscreenListener);
     }
-    if(!this._calendarTimer)this._calendarTimer=setInterval(()=>this.loadCalendar(true),300000);
+    if(!this._calendarTimer)this._calendarTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadCalendar(true)},120000);
     this.loadWeatherForecast();
     if(!this._weatherTimer)this._weatherTimer=setInterval(()=>this.loadWeatherForecast(true),1800000);
     if(!this._storageListener){
@@ -273,7 +273,7 @@ class VeltoDashboard extends HTMLElement {
         const endDate=endValue?this.eventDate(endValue):startDate;
         return Number.isFinite(endDate.getTime())&&endDate>=start&&endDate>=startDate
       }).sort((a,b)=>this.eventDate(a.start)-this.eventDate(b.start));
-      this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this.render();
+      this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this._calendarLastChecked=successful.length?new Date():this._calendarLastChecked;this.render();
     }catch(err){if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarError=err;this.render()}console.warn('VELTO calendar:',err)}
     finally{if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarLoading=false;this.render()}}
   }
@@ -1091,7 +1091,7 @@ class VeltoDashboard extends HTMLElement {
       main.insertBefore(sec,top.nextSibling);main.insertBefore(w,sec.nextSibling)}
     if((c.calendar?.entity||c.calendar?.entities?.length)&&(this._room==='all'||c.calendar.show_in_rooms)){
       const cfg=c.calendar,section=el('section','calendar-section'),head=el('div','section-head');
-      head.append(el('h3','',cfg.title||'Najbliższe wydarzenia'),el('small','',cfg.days?cfg.days+' dni':'14 dni'));const refresh=el('button','calendar-refresh','Odśwież');refresh.type='button';refresh.disabled=!!this._calendarLoading;refresh.setAttribute('aria-label','Odśwież wydarzenia kalendarza');refresh.addEventListener('click',()=>{if(!this._calendarLoading)this.loadCalendar(true)});head.append(refresh);section.append(head);
+      head.append(el('h3','',cfg.title||'Najbliższe wydarzenia'),el('small','',cfg.days?cfg.days+' dni':'14 dni'));const refresh=el('button','calendar-refresh','Odśwież');refresh.type='button';refresh.disabled=!!this._calendarLoading;refresh.setAttribute('aria-label','Odśwież wydarzenia kalendarza');refresh.addEventListener('click',()=>{if(!this._calendarLoading)this.loadCalendar(true)});head.append(refresh);section.append(head);if(this._calendarLastChecked){const checked=el('small','calendar-last-checked','Ostatnio pobrano z HA: '+this._calendarLastChecked.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'})+' · automatycznie co 2 min');section.append(checked)}
       const events=this._calendarEvents.slice(0,Math.max(1,Math.min(30,Number(cfg.limit)||6)));
       if(this._calendarError)section.append(el('div','registry-warning',events.length?'Nie udało się pobrać części kalendarzy. Wyświetlam dostępne wydarzenia.':'Nie udało się pobrać kalendarza. Sprawdź integrację i uprawnienia w Home Assistant.'));
       else if(!events.length)section.append(el('div','calendar-empty',this._calendarLoading?'Ładowanie wydarzeń…':'Brak nadchodzących wydarzeń.'));
