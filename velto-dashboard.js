@@ -1107,7 +1107,7 @@ class VeltoDashboard extends HTMLElement {
         if(event.location)content.append(el('small','calendar-location',event.location));
         item.append(dateBox,content);list.append(item)
       }
-      section.append(list);main.append(section)
+      section.append(list);const weatherPanel=main.querySelector('section.weather');const header=main.querySelector('.top');if(weatherPanel)weatherPanel.after(section);else if(header)header.after(section);else main.prepend(section)
     }
     main.append(el('div','hint','Przytrzymaj kafelek lub kliknij prawym przyciskiem, aby otworzyć szczegóły urządzenia.'));shell.append(main);root.append(shell);for(const [node,top,left] of scrollPositions){node.scrollTop=top;node.scrollLeft=left}if((globalThis.scrollY||0)!==pageY&&typeof globalThis.scrollTo==='function')globalThis.scrollTo(pageX,pageY);this.updateFullscreenButton();if(openDialog)root.append(openDialog)
   }
