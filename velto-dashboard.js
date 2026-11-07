@@ -1096,6 +1096,7 @@ class VeltoDashboard extends HTMLElement {
             strip.append(day)
           }
           
+          if(this._weatherForecast.length<7){const note=el('p','forecast-status','Źródło pogody udostępnia '+this._weatherForecast.length+' dni prognozy. Brakujące dni nie są generowane sztucznie.');note.setAttribute('role','status');forecast.append(note)}
           forecast.append(strip)
         }else forecast.append(el('div','forecast-status',this._weatherForecastError?'Prognoza dzienna niedostępna dla tej encji pogodowej.':'Ładowanie prognozy 7-dniowej…'));
         w.append(forecast)
