@@ -454,10 +454,10 @@ class VeltoDashboard extends HTMLElement {
         if(closed||token!==request)return;
         const entries=(Array.isArray(data?.[0])?data[0]:[]).map(x=>({time:new Date(x.last_changed||x.last_updated).getTime(),value:Number(String(x.state).replace(',','.'))})).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.value));
         if(!entries.length){body.replaceChildren(make('p','','Brak zapisanych pomiarów w tym okresie. Sprawdź encję i integrację Recorder w Home Assistant.'));return}
-        const min=Math.min(...entries.map(x=>x.value)),max=Math.max(...entries.map(x=>x.value)),width=600,height=190,pad=16,range=max-min||1;
+        let min=Infinity,max=-Infinity;for(const entry of entries){if(entry.value<min)min=entry.value;if(entry.value>max)max=entry.value}const width=600,height=190,pad=16,range=max-min||1;
         const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 600 190');svg.setAttribute('role','img');svg.setAttribute('aria-label','Wykres '+label+' z '+days+' dni');svg.classList.add('velto-history-chart');
         const startTime=start.getTime(),duration=end.getTime()-startTime;
-        const points=entries.map(x=>[(pad+(x.time-startTime)/duration*(width-pad*2)).toFixed(1),(height-pad-(x.value-min)/range*(height-pad*2)).toFixed(1)]);
+        const stride=Math.max(1,Math.ceil(entries.length/1200));const samples=entries.filter((_,i)=>i%stride===0||i===entries.length-1);const points=samples.map(x=>[(pad+(x.time-startTime)/duration*(width-pad*2)).toFixed(1),(height-pad-(x.value-min)/range*(height-pad*2)).toFixed(1)]);
         const poly=document.createElementNS('http://www.w3.org/2000/svg','polyline');poly.setAttribute('points',points.map(x=>x.join(',')).join(' '));poly.setAttribute('fill','none');poly.setAttribute('stroke','#d58b28');poly.setAttribute('stroke-width','3');poly.setAttribute('stroke-linejoin','round');poly.setAttribute('stroke-linecap','round');svg.append(poly);
         const summary=make('p','velto-history-summary','Min: '+min.toLocaleString('pl-PL')+' '+unit+' · Max: '+max.toLocaleString('pl-PL')+' '+unit+' · Próbek: '+entries.length);
         const first=entries[0],last=entries.at(-1);const times=make('p','velto-history-times',new Date(first.time).toLocaleString('pl-PL')+' — '+new Date(last.time).toLocaleString('pl-PL'));
