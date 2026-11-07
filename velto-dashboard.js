@@ -167,7 +167,7 @@ class VeltoDashboard extends HTMLElement {
     const cfg=this._config.waste_collection||{};
     if(cfg.enabled!==true)return null;
     const anchorText=typeof cfg.anchor_date==='string'?cfg.anchor_date:'2026-11-06';
-    const match=anchorText.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+    const match=anchorText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if(!match)return null;
     const anchor=new Date(Number(match[1]),Number(match[2])-1,Number(match[3]));
     if(anchor.getFullYear()!==Number(match[1])||anchor.getMonth()!==Number(match[2])-1||anchor.getDate()!==Number(match[3])||anchor.getDay()!==5)return null;
