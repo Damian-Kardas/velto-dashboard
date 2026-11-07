@@ -44,6 +44,21 @@ If HACS does not immediately offer an update, open **HACS → VELTO Dashboard �
 
 This is a preview build. Keep a fallback dashboard while checking the new sidebar and scrolling on your own devices.
 
+## Weekly waste collection tile
+
+VELTO can show an optional **Odpady** tile for a weekly Friday collection that alternates between mixed waste and recycling. Enable **Odbiór odpadów** in the visual editor, then set the anchor Friday and its collection type. Example:
+
+```yaml
+waste_collection:
+  enabled: true
+  anchor_date: "2026-11-06" # Friday: mixed waste
+  anchor_type: mixed
+  show_next: true
+  show_in_rooms: false
+```
+
+The tile calculates future Fridays automatically and displays the next collection, bin hint and countdown. It does not send notifications or create Home Assistant entities.
+
 ## Updating
 
 Once installed through HACS, update VELTO from HACS instead of manually replacing files in `/config/www`.
