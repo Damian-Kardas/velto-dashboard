@@ -36,6 +36,14 @@ Do not keep the old and HACS resources active at the same time.
 
 The visual configurator can automatically discover Home Assistant Areas and devices. It also lets you choose presence, calendar, theme and a `weather.*` entity for the 7-day forecast. Advanced settings expose smart layout, diagnostics, room controls, favorites and tile-layout persistence.
 
+## Latest preview update (November 2026)
+
+The current HACS distribution includes a collapsible room sidebar, clearer device filters, scroll-position preservation, a seven-day weather layout, animated forecast symbols and PM2.5/PM10 severity labels.
+
+If HACS does not immediately offer an update, open **HACS → VELTO Dashboard → ⋮ → Redownload** (menu wording may vary), then reload Home Assistant and hard-refresh the browser. Existing installations should keep the resource URL under `/hacsfiles/velto-dashboard/velto-dashboard.js`; do not add the old `/local/velto/...` resource alongside it.
+
+This is a preview build. Keep a fallback dashboard while checking the new sidebar and scrolling on your own devices.
+
 ## Updating
 
 Once installed through HACS, update VELTO from HACS instead of manually replacing files in `/config/www`.
