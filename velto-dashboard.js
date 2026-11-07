@@ -217,7 +217,7 @@ class VeltoDashboard extends HTMLElement {
     return ({'clear-night':'Bezchmurnie','cloudy':'Pochmurno','fog':'Mgła','hail':'Grad','lightning':'Burze','lightning-rainy':'Burze z deszczem','partlycloudy':'Częściowe zachmurzenie','pouring':'Ulewa','rainy':'Deszcz','snowy':'Śnieg','snowy-rainy':'Śnieg z deszczem','sunny':'Słonecznie','windy':'Wietrznie','windy-variant':'Wietrznie i pochmurno','exceptional':'Nietypowe warunki'})[condition]||condition||'Brak danych'
   }
   weatherConditionIcon(condition){
-    const icons={'clear-night':'moon','cloudy':'weather','fog':'fog','hail':'hail','lightning':'lightning','lightning-rainy':'lightning-rainy','partlycloudy':'partlycloudy','pouring':'pouring','rainy':'rainy','snowy':'snowy','snowy-rainy':'snowy-rainy','sunny':'sun','windy':'windy','windy-variant':'windy-variant','exceptional':'exceptional'};
+    const icons={'clear-night':'moon','cloudy':'weather','fog':'fog','hail':'hail','lightning':'lightning','lightning-rainy':'lightning-rainy','partlycloudy':'partlycloudy','pouring':'pouring','rainy':'rainy','snowy':'snowy','snowy-rainy':'snowy-rainy','sunny':'weather-sun','windy':'windy','windy-variant':'windy-variant','exceptional':'exceptional'};
     return this.icon(icons[condition]||'weather')
   }
   normalizeDailyForecast(items,type='daily'){
@@ -715,6 +715,7 @@ class VeltoDashboard extends HTMLElement {
       water:['path|M12 3C9 8 6 11 6 15a6 6 0 0 0 12 0c0-4-3-7-6-12Z'],
       smoke:['path|M4 17c0-3 4-3 4-6s-4-3-4-6','path|M11 19c0-3 4-3 4-6s-4-3-4-6','path|M18 19c0-3 3-3 3-6s-3-3-3-6'],
       sun:['circle|12 12 4','path|M12 2v2','path|M12 20v2','path|M4.9 4.9l1.4 1.4','path|m17.7 17.7 1.4 1.4','path|M2 12h2','path|M20 12h2','path|m4.9 19.1 1.4-1.4','path|m17.7 6.3 1.4-1.4'],
+      'weather-sun':['circle|12 12 4','path|M12 2v2','path|M12 20v2','path|M4.9 4.9l1.4 1.4','path|m17.7 17.7 1.4 1.4','path|M2 12h2','path|M20 12h2','path|m4.9 19.1 1.4-1.4','path|m17.7 6.3 1.4-1.4'],
       plug:['path|M8 3v5','path|M16 3v5','path|M7 8h10v4a5 5 0 0 1-10 0Z','path|M12 17v4'],
       generic:['rect|4 4 16 16 4','circle|12 12 3']
     };
