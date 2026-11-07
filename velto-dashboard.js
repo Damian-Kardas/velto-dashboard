@@ -879,8 +879,8 @@ class VeltoDashboard extends HTMLElement {
         else if(on&&['light','switch','fan','input_boolean','cover','media_player','vacuum'].includes(domain)){const status=el('span','tile-status tile-status-on',domain==='cover'?'Otwarta':domain==='media_player'?'Odtwarzanie':domain==='vacuum'?'Pracuje':'Aktywne');status.setAttribute('aria-hidden','true');desc.append(status)}
         if(domain==='light'&&!missing&&((Array.isArray(s.attributes?.supported_color_modes)&&s.attributes.supported_color_modes.some(mode=>mode!=='onoff'&&mode!=='unknown'))||s.attributes?.supported_features&1)){
           const brightness=Number(s.attributes?.brightness),pct=Number.isFinite(brightness)?Math.round(Math.max(0,Math.min(255,brightness))/255*100):0,slider=document.createElement('input'),brightnessValue=el('span','brightness-label');
-          slider.type='range';slider.className='brightness';slider.min='1';slider.max='100';slider.value=String(on?Math.max(1,pct):1);slider.setAttribute('aria-label','Jasność '+(t.name||this.name(t.entity)));
-          const updateBrightness=()=>{brightnessValue.textContent='Jasność · '+slider.value+'%';slider.style.setProperty('--brightness',slider.value+'%')};
+          slider.type='range';slider.className='brightness';slider.min='0';slider.max='100';slider.value=String(on?Math.max(1,pct):0);slider.disabled=!on;slider.setAttribute('aria-label','Jasność '+(t.name||this.name(t.entity)));
+          const updateBrightness=()=>{brightnessValue.textContent=on?'Jasność · '+slider.value+'%':'Jasność · wyłączone';slider.style.setProperty('--brightness',on?slider.value+'%':'0%')};
           updateBrightness();
           for(const event of ['pointerdown','pointerup','click','keydown','keyup'])slider.addEventListener(event,e=>e.stopPropagation());
           slider.addEventListener('input',e=>{e.stopPropagation();updateBrightness()});
@@ -1001,7 +1001,7 @@ class VeltoDashboard extends HTMLElement {
         }else forecast.append(el('div','forecast-status',this._weatherForecastError?'Prognoza dzienna niedostępna dla tej encji pogodowej.':'Ładowanie prognozy 7-dniowej…'));
         w.append(forecast)
       }
-      main.append(w)}
+      main.prepend(w);main.prepend(sec)}
     if((c.calendar?.entity||c.calendar?.entities?.length)&&(this._room==='all'||c.calendar.show_in_rooms)){
       const cfg=c.calendar,section=el('section','calendar-section'),head=el('div','section-head');
       head.append(el('h3','',cfg.title||'Najbliższe wydarzenia'),el('small','',cfg.days?cfg.days+' dni':'14 dni'));const refresh=el('button','calendar-refresh','Odśwież');refresh.type='button';refresh.disabled=!!this._calendarLoading;refresh.setAttribute('aria-label','Odśwież wydarzenia kalendarza');refresh.addEventListener('click',()=>{if(!this._calendarLoading)this.loadCalendar(true)});head.append(refresh);section.append(head);
