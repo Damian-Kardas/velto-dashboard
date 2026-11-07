@@ -1,6 +1,6 @@
 /* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
 class VeltoDashboard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=true;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=true;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false}
   layoutStorageKey(config=this._config){
     const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
     const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
@@ -97,6 +97,13 @@ class VeltoDashboard extends HTMLElement {
       this._fullscreenListener=()=>this.updateFullscreenButton();
       document.addEventListener('fullscreenchange',this._fullscreenListener);
     }
+    if(!this._visibilityListener){
+      this._visibilityListener=()=>{
+        if(globalThis.document?.hidden)return;
+        this.render();this.scheduleDayRefresh();this.loadCalendar(true);this.loadWeatherForecast(true);
+      };
+      document.addEventListener('visibilitychange',this._visibilityListener);
+    }
     if(!this._clockTimer)this._clockTimer=setInterval(()=>{const clock=this.shadowRoot?.querySelector('.velto-clock');if(clock){const now=new Date();clock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=now.toISOString()}},30000);
     if(!this._calendarTimer)this._calendarTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadCalendar(true)},120000);
     this.loadWeatherForecast();
@@ -125,6 +132,7 @@ class VeltoDashboard extends HTMLElement {
     if(this._weatherTimer){clearInterval(this._weatherTimer);this._weatherTimer=null}
     if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
     if(this._fullscreenListener){document.removeEventListener('fullscreenchange',this._fullscreenListener);this._fullscreenListener=null}
+    if(this._visibilityListener){document.removeEventListener('visibilitychange',this._visibilityListener);this._visibilityListener=null}
     if(this._storageListener){globalThis?.removeEventListener?.('storage',this._storageListener);this._storageListener=null}
     this._closeDetails?.()
   }

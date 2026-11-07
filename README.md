@@ -34,7 +34,7 @@ Do not keep the old and HACS resources active at the same time.
 
 ## First-run setup
 
-The visual configurator can automatically discover Home Assistant Areas and devices. It also lets you choose presence, calendar, theme and a `weather.*` entity for the 7-day forecast. Advanced settings expose smart layout, diagnostics, room controls, favorites and tile-layout persistence.
+The visual configurator can automatically discover Home Assistant Areas and devices. It also lets you choose presence, calendar, theme and a `weather.*` entity for the 7-day forecast. Advanced settings expose smart layout, diagnostics, room controls, favorites and tile-layout persistence. When the Home Assistant tab or app returns to the foreground, VELTO refreshes the calendar and weather forecast, redraws date-driven tiles and realigns the midnight refresh timer. Periodic calendar checks are skipped while the page is hidden.
 
 ## Latest preview update (November 2026)
 
