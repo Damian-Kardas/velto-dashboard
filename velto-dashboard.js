@@ -767,6 +767,40 @@ class VeltoDashboard extends HTMLElement {
 @container(min-width:1121px){.weather{grid-template-columns:minmax(145px,.85fr) minmax(190px,1.2fr) minmax(0,3fr);align-items:stretch}.weather>.weather-forecast{grid-column:3;grid-row:1;display:flex;flex-direction:column;min-width:0;width:100%;align-self:stretch}.weather .forecast-strip{flex:1;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;min-width:0;width:100%;align-items:stretch;overflow-x:auto}.weather .forecast-day{min-width:0;width:100%;height:100%;align-content:center}.weather .metrics{align-self:stretch}.weather .metric{display:flex;flex-direction:column;justify-content:center}.weather .pm-label{margin-top:auto}}
 @container(min-width:621px) and (max-width:1120px){.weather .forecast-strip{grid-template-columns:repeat(6,minmax(0,1fr))}}
 
+/* Mobile compact sidebar and fullscreen fallback for iOS WebKit */
+.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100dvh!important;overflow:auto!important;overscroll-behavior:contain;border-radius:0!important;padding-bottom:env(safe-area-inset-bottom)!important;background:var(--primary-background-color,#eeeae2)}
+@media(max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
+@container (max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
+.weather-history-target{cursor:pointer;touch-action:pan-y}.weather-history-target:focus-visible{outline:2px solid #e99524;outline-offset:3px}
+.velto-history-modal{max-width:min(640px,94vw)}.velto-history-ranges{display:flex;gap:8px;margin:12px 0}.velto-history-range{border:1px solid #d9c5a8;border-radius:10px;padding:9px 13px;background:transparent;color:inherit;cursor:pointer}.velto-history-range[aria-pressed=true]{background:#e99524;color:#241b0e}.velto-history-body{min-height:120px}.velto-history-chart{display:block;width:100%;height:auto;max-height:220px;background:#ffffff12;border-radius:12px}.velto-history-summary,.velto-history-times{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+
+/* Mobile dashboard: compact rooms, one-line status, readable horizontal forecast */
+@media(max-width:780px){
+.layout .sidebar .nav,.layout.sidebar-collapsed .sidebar .nav{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:7px!important;scroll-snap-type:x proximity;padding:4px 1px 9px!important;width:100%;-webkit-overflow-scrolling:touch}
+.layout .sidebar .nav button,.layout.sidebar-collapsed .sidebar .nav button{display:inline-flex!important;flex:0 0 auto!important;width:auto!important;max-width:160px;min-width:44px!important;height:44px!important;min-height:44px!important;padding:8px 12px!important;font-size:12px!important;gap:6px!important;white-space:nowrap!important;scroll-snap-align:start}
+.layout.sidebar-collapsed .sidebar .nav button{font-size:0!important;padding:8px 11px!important;width:44px!important}
+.layout .sidebar .nav button svg{width:19px;height:19px;flex:none}
+.layout .top{display:flex!important;flex-wrap:nowrap!important;align-items:center!important;gap:6px!important;width:100%;min-width:0}
+.layout .top>div:first-child{display:flex;align-items:baseline;gap:5px;min-width:0;flex:1 1 auto;white-space:nowrap}
+.layout .top h2{font-size:clamp(14px,3.9vw,21px)!important;margin:0!important;white-space:nowrap}
+.layout .top .velto-clock{font-size:11px!important;white-space:nowrap}
+.layout .top .velto-top-actions{display:flex!important;flex:0 0 auto;gap:3px!important}
+.layout .top .velto-top-actions button{width:29px!important;height:31px!important;min-width:29px!important;min-height:31px!important;font-size:16px!important;padding:0!important}
+.layout .top .presence{flex:0 0 auto!important;padding:4px!important;gap:4px!important;min-width:0}
+.layout .top .presence .avatar{width:25px!important;height:25px!important}
+.layout .top .presence strong{font-size:11px!important}
+.layout .top .presence small{font-size:9px!important}
+.layout .forecast-strip{display:flex!important;grid-template-columns:none!important;gap:8px!important;overflow-x:auto!important;width:100%;padding:4px 1px 12px!important;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.layout .forecast-strip .forecast-day{display:grid!important;flex:0 0 112px!important;box-sizing:border-box!important;width:112px!important;min-width:112px!important;max-width:112px!important;overflow:hidden!important;padding:10px 6px!important;scroll-snap-align:start}
+.layout .forecast-day>*{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+.calendar-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.calendar-privacy,.calendar-compact-toggle{border:1px solid #d2a35d;border-radius:10px;background:transparent;color:inherit;padding:7px 9px;cursor:pointer;font:inherit;font-size:11px}.calendar-privacy:focus-visible,.calendar-compact-toggle:focus-visible{outline:2px solid #e99524;outline-offset:2px}.calendar-compact .calendar-event-extra{display:none!important}.calendar-private .calendar-event-title{filter:blur(5px);user-select:none;-webkit-user-select:none}.calendar-private .calendar-location{display:none!important}
+@media(max-width:780px){.calendar-list{grid-template-columns:minmax(0,1fr)!important}.calendar-actions{justify-content:flex-end}.calendar-event{min-width:0}}
+
+
+/* Final mobile overrides: keep room buttons compact, forecast cards isolated and calendar actions legible */
+@media(max-width:780px){.layout .sidebar .nav button{max-width:140px!important}.layout.sidebar-collapsed .sidebar .nav button{width:44px!important;max-width:44px!important}.layout .forecast-strip{grid-auto-columns:112px!important;grid-auto-flow:column!important;grid-template-columns:none!important;justify-content:start!important}.layout .forecast-strip .forecast-day{margin:0!important;transform:none!important;position:relative!important;left:auto!important;right:auto!important}}
+.calendar-privacy,.calendar-compact-toggle{color:#a96a17!important;background:#fff7e9!important;border-color:#dfb977!important;min-width:34px;min-height:34px;font-size:19px!important;font-weight:700!important}.calendar-privacy:disabled,.calendar-compact-toggle:disabled{opacity:.4;cursor:default}.calendar-private .calendar-event-title{filter:blur(7px)!important;opacity:.9!important}.calendar-private .calendar-event-title::selection{background:transparent}
 `;root.append(css);
     const h=this._hass,c=this._config;
     const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
@@ -1106,8 +1140,8 @@ class VeltoDashboard extends HTMLElement {
       const cfg=c.calendar,section=el('section','calendar-section'),head=el('div','section-head');
       head.append(el('h3','',cfg.title||'Najbliższe wydarzenia'));const calendarActions=el('div','calendar-actions');calendarActions.append(el('small','',cfg.days?cfg.days+' dni':'14 dni'));const refresh=el('button','calendar-refresh','Odśwież');refresh.type='button';refresh.disabled=!!this._calendarLoading;refresh.setAttribute('aria-label','Odśwież wydarzenia kalendarza');refresh.addEventListener('click',()=>{if(!this._calendarLoading)this.loadCalendar(true)});calendarActions.append(refresh);head.append(calendarActions);section.append(head);if(this._calendarLastChecked){const checked=el('small','calendar-last-checked','Pobrano z HA: '+this._calendarLastChecked.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'})+' · sprawdzanie co 2 min · synchronizacja Google zależy od HA');section.append(checked)}
       const events=this._calendarEvents.slice(0,Math.max(1,Math.min(30,Number(cfg.limit)||6)));
-      const privacy=el('button','calendar-privacy',this._calendarPrivate?'Pokaż nazwy':'Ukryj nazwy');privacy.type='button';privacy.setAttribute('aria-pressed',String(this._calendarPrivate));privacy.setAttribute('aria-label',this._calendarPrivate?'Pokaż tytuły wydarzeń':'Ukryj tytuły wydarzeń');privacy.addEventListener('click',()=>{this._calendarPrivate=!this._calendarPrivate;this.render()});calendarActions.insertBefore(privacy,refresh);
-      const compact=el('button','calendar-compact-toggle',this._calendarCompact?'Rozwiń':'Zwiń');compact.type='button';compact.setAttribute('aria-expanded',String(!this._calendarCompact));compact.addEventListener('click',()=>{this._calendarCompact=!this._calendarCompact;this.render()});calendarActions.insertBefore(compact,refresh);
+      const privacy=el('button','calendar-privacy',this._calendarPrivate?'◉':'◌');privacy.title=this._calendarPrivate?'Odkryj tytuły wydarzeń':'Rozmyj tytuły wydarzeń';privacy.type='button';privacy.setAttribute('aria-pressed',String(this._calendarPrivate));privacy.setAttribute('aria-label',this._calendarPrivate?'Pokaż tytuły wydarzeń':'Ukryj tytuły wydarzeń');privacy.addEventListener('click',()=>{this._calendarPrivate=!this._calendarPrivate;this.render()});calendarActions.insertBefore(privacy,refresh);
+      const compact=el('button','calendar-compact-toggle',this._calendarCompact?'▾':'▴');compact.title=this._calendarCompact?'Rozwiń listę wydarzeń':'Zwiń listę wydarzeń';compact.setAttribute('aria-label',compact.title);compact.type='button';compact.setAttribute('aria-expanded',String(!this._calendarCompact));compact.addEventListener('click',()=>{this._calendarCompact=!this._calendarCompact;this.render()});calendarActions.insertBefore(compact,refresh);
       if(this._calendarError)section.append(el('div','registry-warning',events.length?'Nie udało się pobrać części kalendarzy. Wyświetlam dostępne wydarzenia.':'Nie udało się pobrać kalendarza. Sprawdź integrację i uprawnienia w Home Assistant.'));
       else if(!events.length)section.append(el('div','calendar-empty',this._calendarLoading?'Ładowanie wydarzeń…':'Brak nadchodzących wydarzeń.'));
       const list=el('div','calendar-list');
@@ -1115,14 +1149,14 @@ class VeltoDashboard extends HTMLElement {
         const date=this.eventDate(event.start),allDay=this.eventAllDay(event.start),item=el('div','calendar-event');
         const dateBox=el('div','calendar-date');
         dateBox.append(el('b','',date.toLocaleDateString('pl-PL',{day:'2-digit'})),el('small','',date.toLocaleDateString('pl-PL',{month:'short'})));
-        const content=el('div','calendar-copy');const eventTitle=el('strong','calendar-event-title',this._calendarPrivate?'Prywatne wydarzenie':event.summary||'Wydarzenie');if(this._calendarPrivate)eventTitle.setAttribute('aria-label','Tytuł ukryty');content.append(eventTitle);
+        const content=el('div','calendar-copy');const eventTitle=el('strong','calendar-event-title',event.summary||'Wydarzenie');if(this._calendarPrivate)eventTitle.setAttribute('aria-label','Tytuł ukryty');content.append(eventTitle);
         const when=allDay?'Cały dzień':date.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
         const source='';
         content.append(el('small','',date.toLocaleDateString('pl-PL',{weekday:'short'})+' · '+when+(source?' · '+source:'')));
         if(event.location&&!this._calendarPrivate)content.append(el('small','calendar-location',event.location));
         item.append(dateBox,content);if(this._calendarCompact&&eventIndex>=3)item.classList.add('calendar-event-extra');list.append(item)
       }
-      if(this._calendarCompact)section.classList.add('calendar-compact');if(this._calendarPrivate)section.classList.add('calendar-private');section.append(list);const weatherPanel=main.querySelector('section.weather');const header=main.querySelector('.top');if(weatherPanel)weatherPanel.after(section);else if(header)header.after(section);else main.prepend(section)
+      if(events.length<=3)compact.disabled=true;else compact.title+=(events.length-3)+' dodatkowych';if(this._calendarCompact)section.classList.add('calendar-compact');if(this._calendarPrivate)section.classList.add('calendar-private');section.append(list);const weatherPanel=main.querySelector('section.weather');const header=main.querySelector('.top');if(weatherPanel)weatherPanel.after(section);else if(header)header.after(section);else main.prepend(section)
     }
     main.append(el('div','hint','Przytrzymaj kafelek lub kliknij prawym przyciskiem, aby otworzyć szczegóły urządzenia.'));shell.append(main);root.append(shell);for(const [node,top,left] of scrollPositions){node.scrollTop=top;node.scrollLeft=left}if((globalThis.scrollY||0)!==pageY&&typeof globalThis.scrollTo==='function')globalThis.scrollTo(pageX,pageY);this.updateFullscreenButton();if(openDialog)root.append(openDialog)
   }
@@ -1197,35 +1231,6 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
 .setup{padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:18px;background:var(--card-background-color,#fff);display:grid;gap:13px}.setup h3{margin:0;font-size:19px}.setup p{margin:0;line-height:1.45}.setup-ok{font-size:12px;font-weight:700;color:var(--success-color,#4b8b54)}.advanced-toggle{background:transparent}
 .discovery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.discovery div{padding:10px;border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#fff) 80%,var(--primary-color,#c18c43) 8%);text-align:center}.discovery b{display:block;font-size:18px}.discovery small{font-size:10px;opacity:.7}.setup-status{font-size:12px;padding:9px 10px;border-radius:10px;background:var(--secondary-background-color,#f5f5f5)}@media(max-width:520px){.discovery{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-/* Mobile compact sidebar and fullscreen fallback for iOS WebKit */
-.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100dvh!important;overflow:auto!important;overscroll-behavior:contain;border-radius:0!important;padding-bottom:env(safe-area-inset-bottom)!important;background:var(--primary-background-color,#eeeae2)}
-@media(max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
-@container (max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
-.weather-history-target{cursor:pointer;touch-action:pan-y}.weather-history-target:focus-visible{outline:2px solid #e99524;outline-offset:3px}
-.velto-history-modal{max-width:min(640px,94vw)}.velto-history-ranges{display:flex;gap:8px;margin:12px 0}.velto-history-range{border:1px solid #d9c5a8;border-radius:10px;padding:9px 13px;background:transparent;color:inherit;cursor:pointer}.velto-history-range[aria-pressed=true]{background:#e99524;color:#241b0e}.velto-history-body{min-height:120px}.velto-history-chart{display:block;width:100%;height:auto;max-height:220px;background:#ffffff12;border-radius:12px}.velto-history-summary,.velto-history-times{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
-
-/* Mobile dashboard: compact rooms, one-line status, readable horizontal forecast */
-@media(max-width:780px){
-.layout .sidebar .nav,.layout.sidebar-collapsed .sidebar .nav{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:7px!important;scroll-snap-type:x proximity;padding:4px 1px 9px!important;width:100%;-webkit-overflow-scrolling:touch}
-.layout .sidebar .nav button,.layout.sidebar-collapsed .sidebar .nav button{display:inline-flex!important;flex:0 0 auto!important;width:auto!important;max-width:160px;min-width:44px!important;height:44px!important;min-height:44px!important;padding:8px 12px!important;font-size:12px!important;gap:6px!important;white-space:nowrap!important;scroll-snap-align:start}
-.layout.sidebar-collapsed .sidebar .nav button{font-size:0!important;padding:8px 11px!important;width:44px!important}
-.layout .sidebar .nav button svg{width:19px;height:19px;flex:none}
-.layout .top{display:flex!important;flex-wrap:nowrap!important;align-items:center!important;gap:6px!important;width:100%;min-width:0}
-.layout .top>div:first-child{display:flex;align-items:baseline;gap:5px;min-width:0;flex:1 1 auto;white-space:nowrap}
-.layout .top h2{font-size:clamp(14px,3.9vw,21px)!important;margin:0!important;white-space:nowrap}
-.layout .top .velto-clock{font-size:11px!important;white-space:nowrap}
-.layout .top .velto-top-actions{display:flex!important;flex:0 0 auto;gap:3px!important}
-.layout .top .velto-top-actions button{width:29px!important;height:31px!important;min-width:29px!important;min-height:31px!important;font-size:16px!important;padding:0!important}
-.layout .top .presence{flex:0 0 auto!important;padding:4px!important;gap:4px!important;min-width:0}
-.layout .top .presence .avatar{width:25px!important;height:25px!important}
-.layout .top .presence strong{font-size:11px!important}
-.layout .top .presence small{font-size:9px!important}
-.layout .forecast-strip{display:flex!important;grid-template-columns:none!important;gap:8px!important;overflow-x:auto!important;width:100%;padding:4px 1px 12px!important;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
-.layout .forecast-strip .forecast-day{display:grid!important;flex:0 0 112px!important;box-sizing:border-box!important;width:112px!important;min-width:112px!important;max-width:112px!important;overflow:hidden!important;padding:10px 6px!important;scroll-snap-align:start}
-.layout .forecast-day>*{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-}
-.calendar-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.calendar-privacy,.calendar-compact-toggle{border:1px solid #d2a35d;border-radius:10px;background:transparent;color:inherit;padding:7px 9px;cursor:pointer;font:inherit;font-size:11px}.calendar-privacy:focus-visible,.calendar-compact-toggle:focus-visible{outline:2px solid #e99524;outline-offset:2px}.calendar-compact .calendar-event-extra{display:none!important}.calendar-private .calendar-event-title{filter:blur(5px);user-select:none;-webkit-user-select:none}.calendar-private .calendar-location{display:none!important}
-@media(max-width:780px){.calendar-list{grid-template-columns:minmax(0,1fr)!important}.calendar-actions{justify-content:flex-end}.calendar-event{min-width:0}}
 `;root.append(style);
     const wrap=document.createElement('div');wrap.className='wrap';root.append(wrap);
     const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n};
