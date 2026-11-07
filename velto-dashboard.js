@@ -173,9 +173,9 @@ class VeltoDashboard extends HTMLElement {
   }
   wasteCollectionInfo(today=new Date()){
     const cfg=this._config.waste_collection||{};
-    if(cfg.enabled!==true||!(today instanceof Date)||!Number.isFinite(today.getTime()))return null;
+    if(cfg.enabled!==true||!today||typeof today.getTime!=='function'||!Number.isFinite(today.getTime()))return null;
     const anchorText=typeof cfg.anchor_date==='string'?cfg.anchor_date:'2026-11-06';
-    const match=anchorText.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+    const match=anchorText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if(!match)return null;
     const year=Number(match[1]),month=Number(match[2])-1,day=Number(match[3]);
     const anchor=new Date(year,month,day);
