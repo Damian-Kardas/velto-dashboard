@@ -1276,13 +1276,13 @@ if(!window.customCards.some(c=>c.type==='velto-dashboard'))window.customCards.pu
 
 /* Visual configuration editor: rooms, entities, presence. Weather YAML remains supported. */
 class VeltoDashboardEditor extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryError=null}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null}
   setConfig(c){this._config={...c,rooms:Array.isArray(c.rooms)?c.rooms:[]};this.render()}
   set hass(h){
     const oldIds=Object.keys(this._hass?.states||{}),newIds=Object.keys(h?.states||{});
     const previousConnection=this._hass?.connection;
     this._hass=h;
-    if(previousConnection&&h?.connection&&previousConnection!==h.connection){this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryError=null}
+    if(previousConnection!==h?.connection){this._setupRegistryRequest++;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryError=null}
     this.loadSetupRegistry();
     if(!this.shadowRoot?.children.length||oldIds.length!==newIds.length)this.render()
   }
@@ -1290,22 +1290,25 @@ class VeltoDashboardEditor extends HTMLElement {
     const connection=this._hass?.connection;
     if(!connection?.sendMessagePromise)return;
     if(!force&&this._setupRegistryConnection===connection&&this._setupRegistry)return;
-    if(this._setupRegistryLoading)return;
-    this._setupRegistryLoading=true;this._setupRegistryError=null;
+    if(this._setupRegistryLoading&&this._setupRegistryLoadingConnection===connection)return;
+    const request=++this._setupRegistryRequest;
+    this._setupRegistryLoading=true;this._setupRegistryLoadingConnection=connection;this._setupRegistryError=null;
     try{
       const [areas,entities,devices]=await Promise.all([
         connection.sendMessagePromise({type:'config/area_registry/list'}),
         connection.sendMessagePromise({type:'config/entity_registry/list'}),
         connection.sendMessagePromise({type:'config/device_registry/list'})
       ]);
-      if(this._hass?.connection!==connection)return;
+      if(request!==this._setupRegistryRequest||this._hass?.connection!==connection)return;
       this._setupRegistry={areas:Array.isArray(areas)?areas:[],entities:Array.isArray(entities)?entities:[],devices:Array.isArray(devices)?devices:[]};
       this._setupRegistryConnection=connection;this._setupRegistryError=null;
     }catch(error){
-      if(this._hass?.connection===connection){this._setupRegistryError=error;console.warn('VELTO setup discovery unavailable',error)}
+      if(request===this._setupRegistryRequest&&this._hass?.connection===connection){this._setupRegistryError=error;console.warn('VELTO setup discovery unavailable',error)}
     }finally{
-      this._setupRegistryLoading=false;
-      if(this.isConnected)this.render()
+      if(request===this._setupRegistryRequest){
+        this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;
+        if(this.isConnected)this.render()
+      }
     }
   }
   setupSummary(){
