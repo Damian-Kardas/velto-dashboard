@@ -71,7 +71,7 @@ class VeltoDashboard extends HTMLElement {
     const local=config.layout_persistence==='config'?null:this.readLocalLayout(config),localSizes=config.layout_persistence==='config'?null:this.readLocalSizes(config);
     const configured=config.tile_order&&typeof config.tile_order==='object'&&!Array.isArray(config.tile_order)?config.tile_order:{};
     const configuredSizes=config.tile_sizes&&typeof config.tile_sizes==='object'&&!Array.isArray(config.tile_sizes)?config.tile_sizes:{};
-    this._localLayoutOrder=local;this._localTileSizes=localSizes;this._config={...config,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();this.render()}
+    this._localLayoutOrder=local;this._localTileSizes=localSizes;const wasteDefaults={enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true};const wasteConfig={...wasteDefaults,...(config.waste_collection||{})};this._config={...config,title:!config.title||config.title==='Mój dom'?'Księstwo':config.title,waste_collection:wasteConfig,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();this.render()}
   set hass(value){
     const previousConnection=this._hass?.connection,nextConnection=value?.connection;
     this._hass=value;
@@ -500,7 +500,7 @@ class VeltoDashboard extends HTMLElement {
     return [...manual,...groups.filter(g=>(!this._config.hide_empty_rooms||g.entities.length)&&!manual.some(r=>r.id===g.id||r.name===g.name))];
   }
   getCardSize(){return 8}
-  static getStubConfig(){return {title:'Mój dom',auto_areas:true,hide_empty_rooms:true,theme:'auto',smart_layout:true,show_diagnostics:false,max_auto_entities:24,show_home_highlights:true,home_highlight_limit:8,room_controls:true,scene_shortcuts:true,layout_persistence:'hybrid',rooms:[]}}
+  static getStubConfig(){return {title:'Księstwo',auto_areas:true,hide_empty_rooms:true,theme:'auto',smart_layout:true,show_diagnostics:false,max_auto_entities:24,show_home_highlights:true,home_highlight_limit:8,room_controls:true,scene_shortcuts:true,layout_persistence:'hybrid',rooms:[]}}
   static getConfigElement(){return document.createElement('velto-dashboard-editor')}
   getGridOptions(){return {columns:12,min_columns:6,rows:8}}
   entity(id){return this._hass?.states?.[id]}
@@ -933,7 +933,7 @@ class VeltoDashboard extends HTMLElement {
     if(!rooms.some(r=>r.id===this._room))this._room='all';
     for(const room of rooms){const b=el('button',room.id===this._room?'selected':'');const roomName=(room.name||'').toLowerCase();const inferred=this.autoRoomIcon(room.name);const roomIcon=room.id==='all'?'home':(room.icon&&room.icon!=='home'&&room.icon!=='light'&&room.icon!=='plug'&&room.icon!=='sun'&&room.icon!=='door'?room.icon:inferred);b.append(this.phosphorRoomIcon(roomIcon),document.createTextNode(room.name));if(room.id!=='all'){const stats=roomStats(room),count=el('span','nav-count',String(stats.total));count.setAttribute('aria-hidden','true');b.append(count);if(stats.active){const dot=el('span','nav-active');dot.setAttribute('aria-hidden','true');b.append(dot)}}b.type='button';b.title=room.name;b.setAttribute('aria-label',room.name);b.setAttribute('data-velto-focus-key','room:'+room.id);if(room.id===this._room)b.setAttribute('aria-current','page');b.addEventListener('click',()=>{this._room=room.id;this._categoryFilter='all';this.render()});nav.append(b)}
     side.append(nav);const sidebarTools=el('details','sidebar-tools');sidebarTools.setAttribute('data-velto-scroll-key','sidebar-tools');sidebarTools.open=this._sidebarToolsOpen;sidebarTools.addEventListener('toggle',()=>{this._sidebarToolsOpen=sidebarTools.open});sidebarTools.append(el('summary','','Sterowanie i status'));side.insertBefore(sidebarTools,nav);side.append(el('div','sidebar-note','VELTO · Home Assistant'));shell.append(side);
-    const main=el('main','main'),top=el('header','top'),heading=el('div');if(this._editLayout)shell.classList.add('editing');heading.append(el('h2','',this._room==='all'?(!c.title||c.title==='Mój dom'?'Mój dom':c.title):(rooms.find(r=>r.id===this._room)?.name||'Pokój')));top.append(heading);const clock=el('time','velto-clock');const updateClock=()=>{clock.textContent=new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=new Date().toISOString()};updateClock();heading.append(clock);
+    const main=el('main','main'),top=el('header','top'),heading=el('div');if(this._editLayout)shell.classList.add('editing');heading.append(el('h2','',this._room==='all'?(!c.title||c.title==='Mój dom'?'Księstwo':c.title):(rooms.find(r=>r.id===this._room)?.name||'Pokój')));top.append(heading);const clock=el('time','velto-clock');const updateClock=()=>{clock.textContent=new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=new Date().toISOString()};updateClock();heading.append(clock);
     const fullscreen=el('button','velto-fullscreen');fullscreen.type='button';fullscreen.title='Pełny ekran';fullscreen.setAttribute('aria-label','Przełącz pełny ekran');fullscreen.addEventListener('click',()=>this.toggleFullscreen());
     const topActions=el('div','velto-top-actions');topActions.append(fullscreen);
     const edit=el('button','velto-edit',this._editLayout?'✓':'▦');edit.title=this._editLayout?'Zakończ układanie':'Ułóż kafelki';edit.setAttribute('aria-label',edit.title);
@@ -1251,7 +1251,7 @@ class VeltoDashboard extends HTMLElement {
         w.append(forecast)
       }
       main.insertBefore(sec,top.nextSibling);main.insertBefore(w,sec.nextSibling)}
-    if(c.waste_collection?.enabled===true&&(this._room==='all'||c.waste_collection.show_in_rooms)){
+    if(c.waste_collection?.enabled!==false&&(this._room==='all'||c.waste_collection.show_in_rooms)){
       const info=this.wasteCollectionInfo(),cfg=c.waste_collection||{};
       if(info){
         const section=el('section','waste-section'),head=el('div','section-head');
@@ -1306,7 +1306,7 @@ if(!window.customCards.some(c=>c.type==='velto-dashboard'))window.customCards.pu
 /* Visual configuration editor: rooms, entities, presence. Weather YAML remains supported. */
 class VeltoDashboardEditor extends HTMLElement {
   constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null}
-  setConfig(c){this._config={...c,rooms:Array.isArray(c.rooms)?c.rooms:[]};this.render()}
+  setConfig(c){this._config={...c,title:!c.title||c.title==='Mój dom'?'Księstwo':c.title,waste_collection:{enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true,...(c.waste_collection||{})},rooms:Array.isArray(c.rooms)?c.rooms:[]};this.render()}
   set hass(h){
     const oldIds=Object.keys(this._hass?.states||{}),newIds=Object.keys(h?.states||{});
     const previousConnection=this._hass?.connection;
@@ -1403,7 +1403,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
       if(!this._setupRegistryError&&(summary.areas===0||summary.assigned===0))setup.append(node('div','VELTO nie znalazł urządzeń przypisanych do Areas. Przypisz urządzenia do pomieszczeń w Home Assistant albo wybierz tryb ręczny.','setup-status'));
       else if(!this._setupRegistryError)setup.append(node('div','✓ Struktura Home Assistant jest gotowa do automatycznego utworzenia dashboardu.','setup-ok'))
     }
-    setup.append(field('Nazwa domu / dashboardu',c.title||'Mój dom',v=>set({title:v||'Mój dom'})));
+    setup.append(field('Nazwa domu / dashboardu',c.title||'Księstwo',v=>set({title:v||'Księstwo'})));
     const modeLabel=node('label',undefined,'field');modeLabel.append(node('span','Pomieszczenia'));
     modeLabel.append(choose([['auto','Automatycznie z Home Assistant (zalecane)'],['manual','Utworzę ręcznie']],c.auto_areas===false?'manual':'auto',v=>set({auto_areas:v==='auto',hide_empty_rooms:v==='auto'?true:c.hide_empty_rooms,rooms:Array.isArray(c.rooms)?c.rooms:[]})));setup.append(modeLabel);
     const themeQuick=node('label',undefined,'field');themeQuick.append(node('span','Wygląd'));
@@ -1433,7 +1433,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
       }
       return
     }
-    wrap.append(field('Tytuł dashboardu',c.title||'Mój dom',v=>set({title:v})));
+    wrap.append(field('Tytuł dashboardu',c.title||'Księstwo',v=>set({title:v})));
     const auto=node('label',undefined,'field');const autoLabel=node('span','Automatycznie wykrywaj pomieszczenia i urządzenia z Home Assistant');const autoCheck=document.createElement('input');autoCheck.type='checkbox';autoCheck.checked=!!c.auto_areas;autoCheck.style.width='auto';autoCheck.addEventListener('change',()=>set({auto_areas:autoCheck.checked}));auto.append(autoLabel,autoCheck);wrap.append(auto);
     const hide=node('label',undefined,'field');hide.append(node('span','Ukryj puste pokoje'));const hideCheck=document.createElement('input');hideCheck.type='checkbox';hideCheck.style.width='auto';hideCheck.checked=!!c.hide_empty_rooms;hideCheck.addEventListener('change',()=>set({hide_empty_rooms:hideCheck.checked}));hide.append(hideCheck);wrap.append(hide);
     const themeLabel=node('label',undefined,'field');themeLabel.append(node('span','Motyw VELTO'));
@@ -1558,7 +1558,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     wrap.append(node('div','Odbiór odpadów','section'));
     const waste=c.waste_collection||{},wasteEnabled=node('label',undefined,'field');
     wasteEnabled.append(node('span','Włącz kafelek odbioru odpadów'));
-    const wasteCheck=document.createElement('input');wasteCheck.type='checkbox';wasteCheck.style.width='auto';wasteCheck.checked=waste.enabled===true;
+    const wasteCheck=document.createElement('input');wasteCheck.type='checkbox';wasteCheck.style.width='auto';wasteCheck.checked=waste.enabled!==false;
     wasteCheck.addEventListener('change',()=>set({waste_collection:{...this._config.waste_collection,enabled:wasteCheck.checked,anchor_date:waste.anchor_date||'2026-11-06',anchor_type:waste.anchor_type||'mixed'}}));
     wasteEnabled.append(wasteCheck);wrap.append(wasteEnabled);
     const anchor=node('label',undefined,'field');anchor.append(node('span','Data bazowa — piątek, od którego liczymy cykl'));
