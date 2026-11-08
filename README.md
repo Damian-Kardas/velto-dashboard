@@ -59,6 +59,10 @@ waste_collection:
 
 The tile calculates future Fridays automatically and displays the next collection, bin hint and countdown. It does not send notifications or create Home Assistant entities.
 
+## PM2.5 / PM10 reference scale
+
+The weather card uses the six-level Polish GIOŚ Air Quality Index reference bands for 1-hour concentrations: PM2.5 thresholds 13 / 35 / 55 / 75 / 110 µg/m³ and PM10 thresholds 20 / 50 / 80 / 110 / 150 µg/m³. A local or InPost sensor is not a GIOŚ monitoring station, so these labels are indicative comparisons, not an official GIOŚ station index. Missing or invalid readings remain neutral.
+
 ## Mobile fullscreen
 
 The header button first requests the browser Fullscreen API. Some iOS Safari and Home Assistant webview combinations do not allow arbitrary dashboard elements to enter native fullscreen, so VELTO falls back to a fixed, full-viewport layout with safe-area padding for notches and home indicators. The header remains available while scrolling. Exit with the same fullscreen button or press **Escape** when a hardware keyboard is connected. This is a presentation fallback, not kiosk mode or an access-control boundary.
