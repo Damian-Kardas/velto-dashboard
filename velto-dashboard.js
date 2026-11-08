@@ -1,6 +1,6 @@
 /* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
 class VeltoDashboard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._wasteCollapsed=false;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false}
   layoutStorageKey(config=this._config){
     const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
     const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
@@ -248,6 +248,7 @@ class VeltoDashboard extends HTMLElement {
     const type=weeks%2===0?anchorType:(anchorType==='mixed'?'recycling':'mixed');
     return {date:pickup,days:pickupDay-currentDay,type,label:type==='mixed'?'Zmieszane':'Segregowane'};
   }
+  toggleWasteSection(){this._wasteCollapsed=!this._wasteCollapsed;this.render()}
   weatherForecastEntity(){
     const explicit=this._config.weather?.forecast_entity||this._config.weather?.entity;
     if(typeof explicit==='string'&&explicit.startsWith('weather.')&&this._hass?.states?.[explicit])return explicit;
@@ -923,6 +924,26 @@ class VeltoDashboard extends HTMLElement {
 /* Unified accessible calendar toolbar, including dark mode */
 .calendar-actions{gap:6px}.calendar-actions button.calendar-refresh,.calendar-actions button.calendar-privacy,.calendar-actions button.calendar-compact-toggle{display:inline-flex!important;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 32px;width:32px;height:32px;min-height:32px;padding:0!important;border:1px solid #bfa57c!important;border-radius:9px!important;background:#f5f0e7!important;color:#514333!important;font:700 19px/1 system-ui,sans-serif!important;box-shadow:none!important;opacity:1!important}.calendar-actions button.calendar-privacy[aria-pressed=true]{background:#f5deb9!important}.dark .calendar-actions button.calendar-refresh,.dark .calendar-actions button.calendar-privacy,.dark .calendar-actions button.calendar-compact-toggle{background:#343b45!important;border-color:#7e8997!important;color:#f4e9d8!important}.dark .calendar-actions button.calendar-privacy[aria-pressed=true]{background:#594a31!important;color:#ffe4a5!important}.calendar-actions button:focus-visible{outline:2px solid #e99524;outline-offset:2px}.calendar-actions button.calendar-refresh svg,.calendar-actions button.calendar-privacy svg,.calendar-actions button.calendar-compact-toggle svg{width:17px;height:17px;display:block;flex:none}
 
+/* iPad landscape: use the complete row for the six-day forecast. */
+@container (min-width:621px) and (max-width:1280px){
+  .weather{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr)!important;align-items:start}
+  .weather>.weather-forecast{grid-column:1/-1!important;grid-row:auto!important;display:block!important;width:100%;min-width:0}
+  .weather .forecast-strip{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:auto!important;gap:8px;overflow-x:hidden!important}
+  .weather .forecast-day{width:100%;min-width:0!important;padding:10px 5px}
+}
+.weather .metric,.weather .pm-metric,.weather .pm-label,.forecast-day,.forecast-name,.forecast-temp,.forecast-low,.forecast-rain{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:normal}
+.weather .pm-label{white-space:normal;line-height:1.3;hyphens:auto}
+.forecast-day .forecast-name{line-height:1.2;white-space:normal;hyphens:auto}
+.waste-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
+.waste-compact-toggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-width:32px;min-height:32px;padding:0;border:1px solid #bfa57c;border-radius:9px;background:#f5f0e7;color:#514333;cursor:pointer}
+.waste-compact-toggle svg{width:17px;height:17px;display:block}
+.waste-compact-toggle:focus-visible{outline:2px solid #e99524;outline-offset:2px}
+.waste-compact .waste-content{display:none!important}
+.dark .waste-compact-toggle{background:#343b45;border-color:#7e8997;color:#f4e9d8}
+.layout.fullscreen-fallback{background:#eae7e0!important}.layout.fullscreen-fallback.dark{background:#1e232b!important}
+.layout.fullscreen-fallback .top{position:static!important;top:auto!important;z-index:auto;padding:0;margin-bottom:22px;background:transparent!important}
+.layout.fullscreen-fallback.dark .top{background:transparent!important}
+@container(max-width:620px){.waste-actions{gap:5px}.waste-actions>small{font-size:10px}.waste-compact-toggle{width:30px;height:30px;min-width:30px;min-height:30px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;scroll-snap-type:none!important}}`;this._styleElement=css}root.append(css);
     const h=this._hass,c=this._config;
     const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
@@ -1261,8 +1282,12 @@ class VeltoDashboard extends HTMLElement {
     if(c.waste_collection?.enabled!==false&&(this._room==='all'||c.waste_collection.show_in_rooms)){
       const info=this.wasteCollectionInfo(),cfg=c.waste_collection||{};
       if(info){
-        const section=el('section','waste-section'),head=el('div','section-head');
-        head.append(el('h3','',cfg.title||'Odpady'),el('small','','Odbiór w piątek'));section.append(head);
+        const section=el('section','waste-section'),head=el('div','section-head'),actions=el('div','waste-actions');
+        head.append(el('h3','',cfg.title||'Odpady'));
+        actions.append(el('small','','Odbiór w piątek'));
+        const compact=el('button','waste-compact-toggle');compact.append(this.icon(this._wasteCollapsed?'caret-down':'caret-up'));compact.type='button';compact.title=this._wasteCollapsed?'Rozwiń przypomnienie o odpadach':'Zwiń przypomnienie o odpadach';compact.setAttribute('aria-label',compact.title);compact.setAttribute('aria-expanded',String(!this._wasteCollapsed));compact.setAttribute('aria-controls','velto-waste-content');compact.setAttribute('data-velto-focus-key','waste:compact');compact.addEventListener('click',()=>this.toggleWasteSection());
+        actions.append(compact);head.append(actions);section.append(head);
+        const content=el('div','waste-content');content.id='velto-waste-content';
         const card=el('div','waste-card '+(info.type==='mixed'?'waste-mixed':'waste-recycling'));
         const icon=el('div','waste-bin');icon.append(this.icon(info.type==='mixed'?'trash':'recycle'));icon.setAttribute('aria-hidden','true');
         const copy=el('div','waste-copy'),date=info.date.toLocaleDateString('pl-PL',{day:'numeric',month:'long'});
@@ -1270,13 +1295,14 @@ class VeltoDashboard extends HTMLElement {
         const details=info.type==='mixed'?'Czarny pojemnik':'Kolorowe pojemniki';
         copy.append(el('span','',details));
         const countdown=el('div','waste-countdown',info.days===0?'Dziś':info.days===1?'1 dzień':'Za '+info.days+' dni');
-        card.append(icon,copy,countdown);section.append(card);
+        card.append(icon,copy,countdown);content.append(card);
         if(cfg.show_next!==false){
           const nextDate=new Date(info.date);nextDate.setDate(nextDate.getDate()+7);
           const nextType=info.type==='mixed'?'Segregowane':'Zmieszane';
           const next=el('div','waste-next','Następny piątek · '+nextDate.toLocaleDateString('pl-PL',{day:'numeric',month:'long'})+' · '+nextType);
-          section.append(next)
+          content.append(next)
         }
+        if(this._wasteCollapsed)section.classList.add('waste-compact');section.append(content);
         main.insertBefore(section,top.nextSibling)
       }
     }
