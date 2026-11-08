@@ -46,18 +46,22 @@ This is a preview build. Keep a fallback dashboard while checking the new sideba
 
 ## Weekly waste collection tile
 
-VELTO can show an optional **Odpady** tile for a weekly Friday collection that alternates between mixed waste and recycling. Enable **Odbiór odpadów** in the visual editor, then set the anchor Friday and its collection type. Example:
+The **Odpady** tile is enabled by default in the current VELTO preview. It calculates the next Friday pickup from one anchor Friday and alternates between mixed waste and recycling every seven days. It displays the next collection, bin hint, countdown and following Friday.
+
+The built-in anchor (**2026-11-06**, mixed waste) is an example, not a schedule detected from your municipality. Before relying on the reminder, set your own reference Friday and collection type in the visual editor under **Odbiór odpadów**. The editor moves a selected date forward to the next Friday.
+
+You can disable the tile with the editor checkbox or `enabled: false`:
 
 ```yaml
 waste_collection:
   enabled: true
-  anchor_date: "2026-11-06" # Friday: mixed waste
+  anchor_date: "2026-11-06" # example Friday: mixed waste
   anchor_type: mixed
   show_next: true
   show_in_rooms: false
 ```
 
-The tile calculates future Fridays automatically and displays the next collection, bin hint and countdown. It does not send notifications or create Home Assistant entities.
+The tile does not create Home Assistant entities or send notifications.
 
 ## PM2.5 / PM10 reference scale
 
