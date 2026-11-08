@@ -944,6 +944,17 @@ class VeltoDashboard extends HTMLElement {
 .layout.fullscreen-fallback .top{position:static!important;top:auto!important;z-index:auto;padding:0;margin-bottom:22px;background:transparent!important}
 .layout.fullscreen-fallback.dark .top{background:transparent!important}
 @container(max-width:620px){.waste-actions{gap:5px}.waste-actions>small{font-size:10px}.waste-compact-toggle{width:30px;height:30px;min-width:30px;min-height:30px}}
+/* iPad landscape and native Safari fullscreen: override legacy compact/mobile forecast rules. */
+@media (min-width:781px) and (max-width:1366px){
+  .layout .weather{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr)!important;align-items:start!important}
+  .layout .weather>.weather-forecast{grid-column:1/-1!important;grid-row:auto!important;display:block!important;width:100%!important;min-width:0!important}
+  .layout .weather .weather-forecast .forecast-strip{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;gap:8px!important;width:100%!important;min-width:0!important;max-width:100%!important;overflow:visible!important}
+  .layout .weather .weather-forecast .forecast-day{display:grid!important;box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:none!important;overflow:hidden!important;padding:10px 5px!important}
+  .layout .weather .weather-forecast .forecast-day>*{min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important;white-space:normal!important;text-overflow:clip!important}
+}
+:host(:fullscreen) .layout .top,.layout.fullscreen-fallback .top{position:static!important;inset:auto!important;z-index:auto!important;align-self:auto!important;background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+:host(:fullscreen) .layout .weather,.layout.fullscreen-fallback .weather{min-width:0!important;max-width:100%!important}
+:host(:fullscreen) .layout .weather .weather-forecast,.layout.fullscreen-fallback .weather .weather-forecast{min-width:0!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;scroll-snap-type:none!important}}`;this._styleElement=css}root.append(css);
     const h=this._hass,c=this._config;
     const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
