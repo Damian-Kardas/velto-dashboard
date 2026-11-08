@@ -142,14 +142,14 @@ class VeltoDashboard extends HTMLElement {
       this._storageListener=e=>{
         if(e?.key==='velto:theme:override'){
           const next=e.newValue==='dark'||e.newValue==='light'?e.newValue:null;
-          if(next!==this._themeOverride){this._themeOverride=next;this.render()}
+          if(next!==this._themeOverride){this._themeOverride=next;this.scheduleRender()}
           return
         }
         if(this._config?.layout_persistence==='config'||![this.layoutStorageKey(),this.layoutSizeStorageKey()].includes(e?.key))return;
         const local=this.readLocalLayout()||{},localSizes=this.readLocalSizes()||{};
         const merged={...(this._config.tile_order||{}),...local},mergedSizes={...(this._config.tile_sizes||{}),...localSizes};
         if(JSON.stringify(merged)===JSON.stringify(this._config.tile_order||{})&&JSON.stringify(mergedSizes)===JSON.stringify(this._config.tile_sizes||{}))return;
-        this._config={...this._config,tile_order:merged,tile_sizes:mergedSizes};this._localLayoutOrder=local;this._localTileSizes=localSizes;this.render()
+        this._config={...this._config,tile_order:merged,tile_sizes:mergedSizes};this._localLayoutOrder=local;this._localTileSizes=localSizes;this.scheduleRender()
       };
       globalThis?.addEventListener?.('storage',this._storageListener)
     }
@@ -327,13 +327,13 @@ class VeltoDashboard extends HTMLElement {
       const unsub=await connection.subscribeMessage(event=>{
         if(request!==this._weatherForecastRequest||this._hass?.connection!==connection||this.weatherForecastEntity()!==entity)return;
         this._weatherForecast=this.normalizeDailyForecast(event?.forecast,event?.type||forecastType);
-        this._weatherForecastError=null;this.render()
+        this._weatherForecastError=null;this.scheduleRender()
       },{type:'weather/subscribe_forecast',forecast_type:forecastType,entity_id:entity});
       if(request!==this._weatherForecastRequest||this._hass?.connection!==connection||this.weatherForecastEntity()!==entity){try{unsub?.()}catch{}return}
       this._weatherForecastUnsub=typeof unsub==='function'?unsub:null;this._weatherForecastRetryAt=this._weatherForecastUnsub?0:Date.now()+60000;this._weatherForecastPending=false;this._weatherForecastConnection=connection
     }catch(error){
       if(request!==this._weatherForecastRequest)return;
-      this._weatherForecastPending=false;this._weatherForecastRetryAt=Date.now()+60000;this._weatherForecast=[];this._weatherForecastError=error;this._weatherForecastConnection=connection;console.warn('VELTO daily forecast unavailable',error);this.render()
+      this._weatherForecastPending=false;this._weatherForecastRetryAt=Date.now()+60000;this._weatherForecast=[];this._weatherForecastError=error;this._weatherForecastConnection=connection;console.warn('VELTO daily forecast unavailable',error);this.scheduleRender()
     }
   }
   polishCount(n,one,few,many){const value=Math.abs(Number(n)||0),mod100=value%100,mod10=value%10;return value===1?one:mod100>=12&&mod100<=14?many:mod10>=2&&mod10<=4?few:many}
@@ -367,7 +367,7 @@ class VeltoDashboard extends HTMLElement {
       if(!this._calendarCompactUserSet)this._calendarCompact=this._calendarEvents.length>3&&!!globalThis.matchMedia?.('(max-width: 780px)')?.matches;
       this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this._calendarLastChecked=successful.length?new Date():this._calendarLastChecked;
     }catch(err){if(request===this._calendarRequest&&this._hass?.connection===connection)this._calendarError=err;console.warn('VELTO calendar:',err)}
-    finally{if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarLoading=false;this.render()}}
+    finally{if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarLoading=false;this.scheduleRender()}}
   }
   eventDate(value){const raw=value?.dateTime||value?.date||value;if(typeof raw==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(raw)){const [y,m,d]=raw.split('-').map(Number);const date=new Date(y,m-1,d);return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d?date:new Date(NaN)}return raw==null||raw===''?new Date(NaN):new Date(raw)}
   eventAllDay(value){return Boolean(value?.date||typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value))}
@@ -384,10 +384,10 @@ class VeltoDashboard extends HTMLElement {
       connection.sendMessagePromise({type:'config/device_registry/list'})
     ]);
     if(request!==this._registryRequest||this._hass?.connection!==connection||!this._config.auto_areas)return;
-    this._registry={areas,entities,devices};this._registryError=null;this._registryConnection=connection;this.render();
+    this._registry={areas,entities,devices};this._registryError=null;this._registryConnection=connection;this.scheduleRender();
     }catch(error){
       if(request!==this._registryRequest||this._hass?.connection!==connection||!this._config.auto_areas)return;
-      this._registryFailedConnection=connection;this._registryError=error;this.render();console.warn('VELTO: area discovery unavailable',error)
+      this._registryFailedConnection=connection;this._registryError=error;this.scheduleRender();console.warn('VELTO: area discovery unavailable',error)
     }finally{if(request===this._registryRequest){this._registryLoading=false;this._registryLoadingConnection=null}}
   }
   autoRoomIcon(name){
@@ -1373,15 +1373,49 @@ if(!window.customCards.some(c=>c.type==='velto-dashboard'))window.customCards.pu
 
 /* Visual configuration editor: rooms, entities, presence. Weather YAML remains supported. */
 class VeltoDashboardEditor extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null}
-  setConfig(c){this._config={...c,title:!c.title||c.title==='Mój dom'?'Księstwo':c.title,waste_collection:{enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true,...(c.waste_collection||{})},rooms:Array.isArray(c.rooms)?c.rooms:[]};this.render()}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._visibilityListener=null}
+  setConfig(c){this._config={...c,title:!c.title||c.title==='Mój dom'?'Księstwo':c.title,waste_collection:{enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true,...(c.waste_collection||{})},rooms:Array.isArray(c.rooms)?c.rooms:[]};this.scheduleRender()}
+  scheduleRender(){
+    this._renderPending=true;
+    if(this.isConnected===false)return;
+    if(globalThis.document?.hidden===true)return;
+    if(this._renderFrame!==null)return;
+    const flush=()=>{
+      this._renderFrame=null;this._cancelRenderFrame=null;
+      if(this.isConnected===false||globalThis.document?.hidden===true)return;
+      this._renderPending=false;this.render()
+    };
+    if(typeof globalThis.requestAnimationFrame==='function'){
+      const id=globalThis.requestAnimationFrame(flush);this._renderFrame=id;
+      this._cancelRenderFrame=()=>globalThis.cancelAnimationFrame?.(id)
+    }else{
+      const id=setTimeout(flush,16);this._renderFrame=id;
+      this._cancelRenderFrame=()=>clearTimeout(id)
+    }
+  }
+  cancelScheduledRender(){
+    if(this._renderFrame===null)return;
+    this._cancelRenderFrame?.();this._renderFrame=null;this._cancelRenderFrame=null
+  }
+  connectedCallback(){
+    if(this._renderPending)this.scheduleRender();
+    if(!this._visibilityListener){
+      this._visibilityListener=()=>{if(globalThis.document?.hidden!==true)this.scheduleRender()};
+      document.addEventListener('visibilitychange',this._visibilityListener)
+    }
+    this.loadSetupRegistry()
+  }
+  disconnectedCallback(){
+    this.cancelScheduledRender();
+    if(this._visibilityListener){document.removeEventListener('visibilitychange',this._visibilityListener);this._visibilityListener=null}
+  }
   set hass(h){
     const oldIds=Object.keys(this._hass?.states||{}),newIds=Object.keys(h?.states||{});
     const previousConnection=this._hass?.connection;
     this._hass=h;
     if(previousConnection!==h?.connection){this._setupRegistryRequest++;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryError=null}
     this.loadSetupRegistry();
-    if(!this.shadowRoot?.children.length||oldIds.length!==newIds.length)this.render()
+    if(!this.shadowRoot?.children.length||oldIds.length!==newIds.length)this.scheduleRender()
   }
   async loadSetupRegistry(force=false){
     const connection=this._hass?.connection;
@@ -1410,7 +1444,7 @@ class VeltoDashboardEditor extends HTMLElement {
     }finally{
       if(request===this._setupRegistryRequest){
         this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;
-        if(this.isConnected)this.render()
+        if(this.isConnected)this.scheduleRender()
       }
     }
   }
