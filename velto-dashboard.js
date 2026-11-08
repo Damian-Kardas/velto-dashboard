@@ -1294,16 +1294,22 @@ class VeltoDashboardEditor extends HTMLElement {
     const request=++this._setupRegistryRequest;
     this._setupRegistryLoading=true;this._setupRegistryLoadingConnection=connection;this._setupRegistryError=null;
     try{
-      const [areas,entities,devices]=await Promise.all([
+      const results=await Promise.allSettled([
         connection.sendMessagePromise({type:'config/area_registry/list'}),
         connection.sendMessagePromise({type:'config/entity_registry/list'}),
         connection.sendMessagePromise({type:'config/device_registry/list'})
       ]);
       if(request!==this._setupRegistryRequest||this._hass?.connection!==connection)return;
-      this._setupRegistry={areas:Array.isArray(areas)?areas:[],entities:Array.isArray(entities)?entities:[],devices:Array.isArray(devices)?devices:[]};
-      this._setupRegistryConnection=connection;this._setupRegistryError=null;
+      const labels=['pomieszczeń','encji','urządzeń'],failed=[];
+      const lists=results.map((result,index)=>{
+        if(result.status!=='fulfilled'||!Array.isArray(result.value)){failed.push(labels[index]);return []}
+        return result.value;
+      });
+      this._setupRegistry={areas:lists[0],entities:lists[1],devices:lists[2]};
+      this._setupRegistryConnection=connection;this._setupRegistryError=failed.length?failed:null;
+      if(failed.length)console.warn('VELTO setup registry partially unavailable',failed);
     }catch(error){
-      if(request===this._setupRegistryRequest&&this._hass?.connection===connection){this._setupRegistryError=error;console.warn('VELTO setup discovery unavailable',error)}
+      if(request===this._setupRegistryRequest&&this._hass?.connection===connection){this._setupRegistryError=['niektórych rejestrów'];console.warn('VELTO setup discovery unavailable',error)}
     }finally{
       if(request===this._setupRegistryRequest){
         this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;
@@ -1354,16 +1360,19 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     setup.append(node('h3','Uruchom VELTO'));
     setup.append(node('p','Minimum konfiguracji: nadaj nazwę dashboardu i wybierz sposób tworzenia pomieszczeń. Resztę możesz zmienić później.','muted'));
     if(this._setupRegistryLoading)setup.append(node('div','Wykrywam strukturę Home Assistant…','setup-status'));
-    else if(this._setupRegistryError){
-      const status=node('div',undefined,'setup-status');status.append(document.createTextNode('Nie udało się odczytać Areas. '),button('Spróbuj ponownie',()=>this.loadSetupRegistry(true)));setup.append(status)
-    }else if(summary.areas!==null){
+    if(this._setupRegistryError){
+      const status=node('div',undefined,'setup-status');
+      status.append(document.createTextNode('Nie udało się odczytać rejestru: '+this._setupRegistryError.join(', ')+'. Wyniki automatycznego wykrywania mogą być niepełne. '),button('Spróbuj ponownie',()=>this.loadSetupRegistry(true)));
+      setup.append(status)
+    }
+    if(summary.areas!==null){
       const found=node('div',undefined,'discovery');
       for(const [value,label] of [[summary.areas,'pomieszczeń'],[summary.assigned,'urządzeń'],[summary.lights.length,'świateł'],[summary.media.length,'media'],[summary.cameras.length,'kamer'],[summary.people.length,'osób']]){
         const item=node('div');item.append(node('b',String(value)),node('small',label));found.append(item)
       }
       setup.append(found);
-      if(summary.areas===0||summary.assigned===0)setup.append(node('div','VELTO nie znalazł urządzeń przypisanych do Areas. Przypisz urządzenia do pomieszczeń w Home Assistant albo wybierz tryb ręczny.','setup-status'))
-      else setup.append(node('div','✓ Struktura Home Assistant jest gotowa do automatycznego utworzenia dashboardu.','setup-ok'))
+      if(!this._setupRegistryError&&(summary.areas===0||summary.assigned===0))setup.append(node('div','VELTO nie znalazł urządzeń przypisanych do Areas. Przypisz urządzenia do pomieszczeń w Home Assistant albo wybierz tryb ręczny.','setup-status'));
+      else if(!this._setupRegistryError)setup.append(node('div','✓ Struktura Home Assistant jest gotowa do automatycznego utworzenia dashboardu.','setup-ok'))
     }
     setup.append(field('Nazwa domu / dashboardu',c.title||'Mój dom',v=>set({title:v||'Mój dom'})));
     const modeLabel=node('label',undefined,'field');modeLabel.append(node('span','Pomieszczenia'));
