@@ -1,6 +1,6 @@
 /* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
 class VeltoDashboard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._calendarCompactUserSet=false;this._wasteCollapsed=false;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._calendarCompactUserSet=false;this._wasteCollapsed=false;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._serviceActionLocks=new Map()}
   layoutStorageKey(config=this._config){
     const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
     const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
@@ -712,19 +712,39 @@ class VeltoDashboard extends HTMLElement {
     native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
     panel.append(native);backdrop.append(panel);root.append(backdrop);x.focus()
   }
+  serviceActionLock(domain,entityId){
+    const key=String(domain)+':'+String(entityId);
+    let lock=this._serviceActionLocks.get(key);
+    if(!lock){lock={pending:false,buttons:new Set()};this._serviceActionLocks.set(key,lock)}
+    return {key,lock}
+  }
+  pruneServiceActionLocks(){
+    for(const [key,lock] of this._serviceActionLocks){
+      lock.buttons=new Set([...lock.buttons].filter(button=>button.isConnected===true));
+      if(!lock.pending&&!lock.buttons.size)this._serviceActionLocks.delete(key)
+    }
+  }
   serviceActionButton(domain,service,iconName,label,entityId,enabled=true){
-    const button=document.createElement('button');
+    const button=document.createElement('button'),{lock}=this.serviceActionLock(domain,entityId);
     button.type='button';button.className='velto-service-control';
-    button.setAttribute('aria-label',label);button.title=label;button.disabled=!enabled;
+    button._veltoEnabled=Boolean(enabled);
+    button.setAttribute('aria-label',label);button.title=label;button.disabled=!button._veltoEnabled||lock.pending;
+    if(lock.pending)button.setAttribute('aria-busy','true');
+    lock.buttons.add(button);
     button.append(this.phosphorRoomIcon(iconName));
     button.addEventListener('click',async event=>{
       event?.stopPropagation?.();
       const hass=this._hass;
-      if(button.disabled||!button.isConnected||typeof hass?.callService!=='function')return;
-      button.disabled=true;button.setAttribute('aria-busy','true');
+      if(button.disabled||!button.isConnected||typeof hass?.callService!=='function'||lock.pending)return;
+      lock.pending=true;
+      for(const control of lock.buttons)if(control.isConnected){control.disabled=true;control.setAttribute('aria-busy','true')}
       try{await hass.callService(domain,service,{entity_id:entityId})}
       catch(error){const message=domain==='media_player'?'VELTO media control failed':domain==='vacuum'?'VELTO vacuum control failed':domain==='cover'?'VELTO cover control failed':'VELTO '+domain+'.'+service+' failed';console.error(message,error)}
-      finally{if(button.isConnected){button.removeAttribute('aria-busy');button.disabled=!enabled}}
+      finally{
+        lock.pending=false;
+        for(const control of lock.buttons)if(control.isConnected){control.removeAttribute('aria-busy');control.disabled=!control._veltoEnabled}
+        this.pruneServiceActionLocks()
+      }
     });
     return button
   }
@@ -1392,7 +1412,7 @@ class VeltoDashboard extends HTMLElement {
       }
       if(this._calendarCompact)section.classList.add('calendar-compact');if(this._calendarPrivate)section.classList.add('calendar-private');section.append(list);const weatherPanel=main.querySelector('section.weather');const header=main.querySelector('.top');if(weatherPanel)weatherPanel.after(section);else if(header)header.after(section);else main.prepend(section)
     }
-    main.append(el('div','hint','Przytrzymaj kafelek lub kliknij prawym przyciskiem, aby otworzyć szczegóły urządzenia.'));shell.append(main);root.replaceChildren(css,shell,...(openDialog?[openDialog]:[]));this.restoreScrollState(root,scrollState);this.updateFullscreenButton();if(dialogFocus){try{dialogFocus.focus({preventScroll:true})}catch{dialogFocus.focus?.()}}else if(focusKey){const target=[...(root.querySelectorAll?.('[data-velto-focus-key]')||[])].find(item=>item.getAttribute?.('data-velto-focus-key')===focusKey);if(target){try{target.focus({preventScroll:true})}catch{target.focus?.()}}}
+    main.append(el('div','hint','Przytrzymaj kafelek lub kliknij prawym przyciskiem, aby otworzyć szczegóły urządzenia.'));shell.append(main);root.replaceChildren(css,shell,...(openDialog?[openDialog]:[]));this.pruneServiceActionLocks();this.restoreScrollState(root,scrollState);this.updateFullscreenButton();if(dialogFocus){try{dialogFocus.focus({preventScroll:true})}catch{dialogFocus.focus?.()}}else if(focusKey){const target=[...(root.querySelectorAll?.('[data-velto-focus-key]')||[])].find(item=>item.getAttribute?.('data-velto-focus-key')===focusKey);if(target){try{target.focus({preventScroll:true})}catch{target.focus?.()}}}
   }
 }
 if(!customElements.get('velto-dashboard'))customElements.define('velto-dashboard',VeltoDashboard);
