@@ -165,7 +165,7 @@ class VeltoDashboard extends HTMLElement {
     this._fullscreenFallback=true;
     if(!this._fullscreenFallbackKeyListener){
       this._fullscreenFallbackKeyListener=e=>{
-        if(e?.key!=='Escape')return;
+        if(e?.key!=='Escape'||this.shadowRoot?.querySelector?.('.velto-modal-backdrop'))return;
         e.preventDefault?.();this.exitFullscreenFallback()
       };
       document.addEventListener('keydown',this._fullscreenFallbackKeyListener)
