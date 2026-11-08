@@ -316,7 +316,7 @@ class VeltoDashboard extends HTMLElement {
     if(!force&&this._calendarKey===key)return;
     if(this._calendarLoading&&this._calendarKey===key)return;
     this._calendarLoading=true;this._calendarKey=key;this._calendarConnection=connection;const request=++this._calendarRequest;
-    const start=new Date(),end=new Date(start.getTime());end.setDate(end.getDate()+days);
+    const now=new Date(),start=new Date(now.getFullYear(),now.getMonth(),now.getDate()),end=new Date(start);end.setDate(end.getDate()+days);
     try{
       const result=await Promise.allSettled(ids.map(async id=>{
         const path='calendars/'+encodeURIComponent(id)+'?start='+encodeURIComponent(start.toISOString())+'&end='+encodeURIComponent(end.toISOString());
@@ -332,10 +332,10 @@ class VeltoDashboard extends HTMLElement {
         if(!Number.isFinite(startDate.getTime()))return false;
         const endValue=event.end?.dateTime||event.end?.date||event.end;
         const endDate=endValue?this.eventDate(endValue):startDate;
-        return Number.isFinite(endDate.getTime())&&endDate>=start&&endDate>=startDate
+        return Number.isFinite(endDate.getTime())&&endDate>=now&&endDate>=startDate
       }).sort((a,b)=>this.eventDate(a.start)-this.eventDate(b.start));
-      this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this._calendarLastChecked=successful.length?new Date():this._calendarLastChecked;this.render();
-    }catch(err){if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarError=err;this.render()}console.warn('VELTO calendar:',err)}
+      this._calendarError=failures.length?new Error(failures.length+' calendar source(s) unavailable'):null;this._calendarLastChecked=successful.length?new Date():this._calendarLastChecked;
+    }catch(err){if(request===this._calendarRequest&&this._hass?.connection===connection)this._calendarError=err;console.warn('VELTO calendar:',err)}
     finally{if(request===this._calendarRequest&&this._hass?.connection===connection){this._calendarLoading=false;this.render()}}
   }
   eventDate(value){const raw=value?.dateTime||value?.date||value;if(typeof raw==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(raw)){const [y,m,d]=raw.split('-').map(Number);const date=new Date(y,m-1,d);return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d?date:new Date(NaN)}return raw==null||raw===''?new Date(NaN):new Date(raw)}
