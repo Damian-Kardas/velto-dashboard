@@ -71,12 +71,12 @@ class VeltoDashboard extends HTMLElement {
     const local=config.layout_persistence==='config'?null:this.readLocalLayout(config),localSizes=config.layout_persistence==='config'?null:this.readLocalSizes(config);
     const configured=config.tile_order&&typeof config.tile_order==='object'&&!Array.isArray(config.tile_order)?config.tile_order:{};
     const configuredSizes=config.tile_sizes&&typeof config.tile_sizes==='object'&&!Array.isArray(config.tile_sizes)?config.tile_sizes:{};
-    this._localLayoutOrder=local;this._localTileSizes=localSizes;const wasteDefaults={enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true};const wasteConfig={...wasteDefaults,...(config.waste_collection||{})};this._config={...config,title:!config.title||config.title==='Mój dom'?'Księstwo':config.title,waste_collection:wasteConfig,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();this.render()}
+    this._localLayoutOrder=local;this._localTileSizes=localSizes;const wasteDefaults={enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true};const wasteConfig={...wasteDefaults,...(config.waste_collection||{})};this._config={...config,title:!config.title||config.title==='Mój dom'?'Księstwo':config.title,waste_collection:wasteConfig,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;if(this.isConnected!==false){this.loadRegistry();this.loadCalendar();this.loadWeatherForecast()}this.render()}
   set hass(value){
     const previousConnection=this._hass?.connection,nextConnection=value?.connection;
     this._hass=value;
     if(previousConnection!==nextConnection){this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarLastChecked=null;this._calendarRequest++;this._calendarLoading=false}
-    this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();
+    if(this.isConnected!==false){this.loadRegistry();this.loadCalendar();this.loadWeatherForecast()}
     const rooms=this.getRooms(),ids=new Set(rooms.flatMap(r=>(r.entities||[]).map(e=>typeof e==='string'?e:e.entity)));
     if(this._config.presence?.entity)ids.add(this._config.presence.entity);
     for(const id of Object.values(this._config.weather?.entities||{}))if(id)ids.add(id);
@@ -136,7 +136,8 @@ class VeltoDashboard extends HTMLElement {
     }
     if(!this._clockTimer)this._clockTimer=setInterval(()=>{const clock=this.shadowRoot?.querySelector('.velto-clock');if(clock){const now=new Date();clock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=now.toISOString()}},30000);
     if(!this._calendarTimer)this._calendarTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadCalendar(true)},120000);
-    this.loadWeatherForecast();
+    // Resume HA data sources whenever Lovelace reattaches this custom card.
+    this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();
     if(!this._weatherTimer)this._weatherTimer=setInterval(()=>this.loadWeatherForecast(true),1800000);
     if(!this._storageListener){
       this._storageListener=e=>{
@@ -156,6 +157,9 @@ class VeltoDashboard extends HTMLElement {
   }
   disconnectedCallback(){
     this.cancelScheduledRender();
+    // Invalidate asynchronous work tied to the detached Lovelace lifecycle.
+    this._calendarRequest++;this._calendarLoading=false;this._calendarKey='';this._calendarConnection=null;
+    this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registryFailedConnection=null;this._registryError=null;
     this._weatherForecastRequest++;this._weatherForecastPending=false;this._weatherForecastRetryAt=0;
     if(this._calendarTimer){clearInterval(this._calendarTimer);this._calendarTimer=null}
     if(this._clockTimer){clearInterval(this._clockTimer);this._clockTimer=null}
@@ -1407,6 +1411,8 @@ class VeltoDashboardEditor extends HTMLElement {
   }
   disconnectedCallback(){
     this.cancelScheduledRender();
+    this._setupRegistryRequest++;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;
+    if(this._setupRegistryError){this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryError=null}
     if(this._visibilityListener){document.removeEventListener('visibilitychange',this._visibilityListener);this._visibilityListener=null}
   }
   set hass(h){
@@ -1414,7 +1420,7 @@ class VeltoDashboardEditor extends HTMLElement {
     const previousConnection=this._hass?.connection;
     this._hass=h;
     if(previousConnection!==h?.connection){this._setupRegistryRequest++;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryError=null}
-    this.loadSetupRegistry();
+    if(this.isConnected!==false)this.loadSetupRegistry();
     if(!this.shadowRoot?.children.length||oldIds.length!==newIds.length)this.scheduleRender()
   }
   async loadSetupRegistry(force=false){
