@@ -113,7 +113,7 @@ class VeltoDashboard extends HTMLElement {
     if(this._dayTimer)clearTimeout(this._dayTimer);
     const next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,1,0);
     const delay=Math.max(1000,next.getTime()-now.getTime());
-    this._dayTimer=setTimeout(()=>{this._dayTimer=null;if(this.isConnected!==false){this.render();this.scheduleDayRefresh()}},delay);
+    this._dayTimer=setTimeout(()=>{this._dayTimer=null;if(this.isConnected!==false){this.scheduleRender();this.scheduleDayRefresh()}},delay);
   }
   connectedCallback(){
     if(this._renderPending)this.scheduleRender();
@@ -129,7 +129,7 @@ class VeltoDashboard extends HTMLElement {
       this._visibilityListener=()=>{
         if(globalThis.document?.hidden)return;
         this.scheduleDayRefresh();
-        if(this._renderPending)this.scheduleRender();else this.render();
+        this.scheduleRender();
         this.loadCalendar(true);this.loadWeatherForecast(true);
       };
       document.addEventListener('visibilitychange',this._visibilityListener);
