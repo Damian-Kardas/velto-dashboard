@@ -1,6 +1,6 @@
 /* VELTO Dashboard v0.1 — native Home Assistant Lovelace custom card, no dependencies. */
 class VeltoDashboard extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._calendarCompactUserSet=false;this._wasteCollapsed=true;try{this._wasteCollapsed=globalThis.localStorage?.getItem?.(this.wasteStorageKey())!=='0'}catch{}this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._serviceActionLocks=new Map()}
+  constructor(){super();this.attachShadow({mode:'open'});this._config={};this._room='all';this._editLayout=false;this._activeOnly=false;this._hideTechnical=false;this._themeOverride=null;try{this._themeOverride=globalThis.localStorage?.getItem?.('velto:theme:override')||null}catch{}this._calendarCompact=false;this._calendarCompactUserSet=false;this._wasteCollapsed=true;this._calendarPrivate=true;try{const saved=globalThis.localStorage?.getItem?.('velto:calendar:private');if(saved!==null&&saved!==undefined)this._calendarPrivate=saved==='1'}catch{};this._sidebarToolsOpen=false;this._sidebarCollapsed=!!globalThis.matchMedia?.('(max-width: 600px)')?.matches;try{if(!this._sidebarCollapsed)this._sidebarCollapsed=globalThis.localStorage?.getItem?.('velto:sidebar:collapsed')==='1'}catch{}this._categoryFilter='all';this._hass=null;this._hassStateCount=null;this._roomsCache=null;this._roomsCacheConfig=null;this._roomsCacheRegistry=null;this._roomsCacheStateCount=-1;this._signatureModel=null;this._attributeSignatureCache=new WeakMap();this._registry=null;this._registryLoading=false;this._registryLoadingConnection=null;this._registryRequest=0;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarEvents=[];this._calendarError=null;this._calendarLoading=false;this._calendarKey='';this._calendarTimer=null;this._clockTimer=null;this._dayTimer=null;this._visibilityListener=null;this._calendarLastChecked=null;this._calendarRequest=0;this._calendarConnection=null;this._weatherForecast=[];this._weatherForecastError=null;this._weatherForecastEntity=null;this._weatherForecastConnection=null;this._weatherForecastUnsub=null;this._weatherForecastPending=false;this._weatherForecastRequest=0;this._weatherForecastRetryAt=0;this._localLayoutOrder=null;this._localTileSizes=null;this._layoutStorageWarning=false;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._serviceActionLocks=new Map();this._iconPathDefinitions=null;this._iconTemplateCache=new Map()}
   layoutStorageKey(config=this._config){
     const scope=String(config?.layout_id||config?.title||'home').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').slice(0,80)||'home';
     const path=String(globalThis?.location?.pathname||'home-assistant').replace(/[^a-z0-9/_-]+/gi,'_').slice(0,120);
@@ -71,18 +71,15 @@ class VeltoDashboard extends HTMLElement {
     const local=config.layout_persistence==='config'?null:this.readLocalLayout(config),localSizes=config.layout_persistence==='config'?null:this.readLocalSizes(config);
     const configured=config.tile_order&&typeof config.tile_order==='object'&&!Array.isArray(config.tile_order)?config.tile_order:{};
     const configuredSizes=config.tile_sizes&&typeof config.tile_sizes==='object'&&!Array.isArray(config.tile_sizes)?config.tile_sizes:{};
-    this._localLayoutOrder=local;this._localTileSizes=localSizes;const wasteDefaults={enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true};const wasteConfig={...wasteDefaults,...(config.waste_collection||{})};this._config={...config,title:!config.title||config.title==='Mój dom'?'Księstwo':config.title,waste_collection:wasteConfig,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;if(this.isConnected!==false){this.loadRegistry();this.loadCalendar();this.loadWeatherForecast()}this.render()}
+    this._localLayoutOrder=local;this._localTileSizes=localSizes;const wasteDefaults={enabled:true,anchor_date:'2026-11-06',anchor_type:'mixed',show_next:true};const wasteConfig={...wasteDefaults,...(config.waste_collection||{})};this._config={...config,title:!config.title||config.title==='Mój dom'?'Księstwo':config.title,waste_collection:wasteConfig,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._wasteCollapsed=true;try{this._wasteCollapsed=globalThis.localStorage?.getItem?.(this.wasteStorageKey(this._config))!=='0'}catch{}this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;if(this.isConnected!==false){this.loadRegistry();this.loadCalendar();this.loadWeatherForecast()}this.render()}
   set hass(value){
     const previousConnection=this._hass?.connection,nextConnection=value?.connection;
     this._hass=value;
-    if(previousConnection!==nextConnection){this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarLastChecked=null;this._calendarRequest++;this._calendarLoading=false}
+    this._hassStateCount=Object.keys(value?.states||{}).length;
+    if(previousConnection!==nextConnection){this._roomsCache=null;this._signatureModel=null;this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarLastChecked=null;this._calendarRequest++;this._calendarLoading=false}
     if(this.isConnected!==false){this.loadRegistry();this.loadCalendar();this.loadWeatherForecast()}
-    const rooms=this.getRooms(),ids=new Set(rooms.flatMap(r=>(r.entities||[]).map(e=>typeof e==='string'?e:e.entity)));
-    if(this._config.presence?.entity)ids.add(this._config.presence.entity);
-    for(const id of Object.values(this._config.weather?.entities||{}))if(id)ids.add(id);
-    const forecastWeatherId=this.weatherForecastEntity();if(forecastWeatherId)ids.add(forecastWeatherId);
-    const signature=[this._room,this._config.theme==='auto'?String(value?.themes?.darkMode):'',rooms.map(r=>[r.id,r.name,(r.entities||[]).map(e=>typeof e==='string'?e:e.entity).join(',')].join(':')).join('|'),
-      ...[...ids].sort().map(id=>{const s=value?.states?.[id],a=s?.attributes||{};return id+':'+(s?.state??'')+':'+[a.friendly_name,a.unit_of_measurement,a.device_class,a.entity_picture,a.media_image_url,a.media_title,a.media_artist,a.app_name,a.source,a.volume_level,a.media_duration,a.media_position,a.supported_features,Array.isArray(a.supported_color_modes)?a.supported_color_modes.join(','):a.supported_color_modes,a.brightness,a.percentage,a.temperature,a.current_temperature,a.hvac_action,a.current_position,a.battery_level,a.status].map(x=>x==null?'':String(x)).join('|')})].join(';');
+    const model=this.signatureModel(),signature=[this._room,this._config.theme==='auto'?String(value?.themes?.darkMode):'',model.roomSignature,
+      ...model.entityIds.map(id=>{const s=value?.states?.[id];return id+':'+(s?.state??'')+':'+this.attributeSignature(s?.attributes)})].join(';');
     if(signature!==this._lastSignature){this._lastSignature=signature;this.scheduleRender()}
   }
   scheduleRender(){
@@ -115,6 +112,17 @@ class VeltoDashboard extends HTMLElement {
     const delay=Math.max(1000,next.getTime()-now.getTime());
     this._dayTimer=setTimeout(()=>{this._dayTimer=null;if(this.isConnected!==false){this.scheduleRender();this.scheduleDayRefresh()}},delay);
   }
+  startPeriodicUpdates(){
+    if(this.isConnected===false||globalThis.document?.hidden===true)return;
+    if(!this._clockTimer)this._clockTimer=setInterval(()=>{if(globalThis.document?.hidden===true)return;const clock=this.shadowRoot?.querySelector('.weather-clock');if(clock){const now=new Date();clock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=now.toISOString()}},30000);
+    if(!this._calendarTimer)this._calendarTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadCalendar(true)},120000);
+    if(!this._weatherTimer)this._weatherTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadWeatherForecast(true)},1800000)
+  }
+  stopPeriodicUpdates(){
+    if(this._clockTimer){clearInterval(this._clockTimer);this._clockTimer=null}
+    if(this._calendarTimer){clearInterval(this._calendarTimer);this._calendarTimer=null}
+    if(this._weatherTimer){clearInterval(this._weatherTimer);this._weatherTimer=null}
+  }
   connectedCallback(){
     if(this._renderPending)this.scheduleRender();
     if(!this._dayTimer)this.scheduleDayRefresh();
@@ -127,23 +135,32 @@ class VeltoDashboard extends HTMLElement {
     }
     if(!this._visibilityListener){
       this._visibilityListener=()=>{
-        if(globalThis.document?.hidden)return;
+        if(globalThis.document?.hidden===true){this.stopPeriodicUpdates();return}
         this.scheduleDayRefresh();
         this.scheduleRender();
         this.loadCalendar(true);this.loadWeatherForecast(true);
+        this.startPeriodicUpdates();
       };
       document.addEventListener('visibilitychange',this._visibilityListener);
     }
-    if(!this._clockTimer)this._clockTimer=setInterval(()=>{const clock=this.shadowRoot?.querySelector('.weather-clock');if(clock){const now=new Date();clock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});clock.dateTime=now.toISOString()}},30000);
-    if(!this._calendarTimer)this._calendarTimer=setInterval(()=>{if(!globalThis.document?.hidden)this.loadCalendar(true)},120000);
     // Resume HA data sources whenever Lovelace reattaches this custom card.
     this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();
-    if(!this._weatherTimer)this._weatherTimer=setInterval(()=>this.loadWeatherForecast(true),1800000);
+    this.startPeriodicUpdates();
     if(!this._storageListener){
       this._storageListener=e=>{
         if(e?.key==='velto:theme:override'){
           const next=e.newValue==='dark'||e.newValue==='light'?e.newValue:null;
           if(next!==this._themeOverride){this._themeOverride=next;this.scheduleRender()}
+          return
+        }
+        if(e?.key==='velto:calendar:private'){
+          const next=e.newValue===null||e.newValue==='1';
+          if(next!==this._calendarPrivate){this._calendarPrivate=next;this.scheduleRender()}
+          return
+        }
+        if(e?.key===this.wasteStorageKey()){
+          const next=e.newValue!=='0';
+          if(next!==this._wasteCollapsed){this._wasteCollapsed=next;this.scheduleRender()}
           return
         }
         if(this._config?.layout_persistence==='config'||![this.layoutStorageKey(),this.layoutSizeStorageKey()].includes(e?.key))return;
@@ -161,10 +178,8 @@ class VeltoDashboard extends HTMLElement {
     this._calendarRequest++;this._calendarLoading=false;this._calendarKey='';this._calendarConnection=null;
     this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registryFailedConnection=null;this._registryError=null;
     this._weatherForecastRequest++;this._weatherForecastPending=false;this._weatherForecastRetryAt=0;
-    if(this._calendarTimer){clearInterval(this._calendarTimer);this._calendarTimer=null}
-    if(this._clockTimer){clearInterval(this._clockTimer);this._clockTimer=null}
+    this.stopPeriodicUpdates();
     if(this._dayTimer){clearTimeout(this._dayTimer);this._dayTimer=null}
-    if(this._weatherTimer){clearInterval(this._weatherTimer);this._weatherTimer=null}
     if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
     if(this._fullscreenListener){document.removeEventListener('fullscreenchange',this._fullscreenListener);this._fullscreenListener=null}
     if(this._fullscreenFallbackKeyListener){document.removeEventListener('keydown',this._fullscreenFallbackKeyListener);this._fullscreenFallbackKeyListener=null}
@@ -490,6 +505,8 @@ class VeltoDashboard extends HTMLElement {
   getRooms(){
     const manual=Array.isArray(this._config.rooms)?this._config.rooms:[];
     if(!this._config.auto_areas||!this._registry)return manual;
+    const states=this._hass?.states||{},stateCount=this._hassStateCount??Object.keys(states).length;
+    if(manual.length===0&&this._roomsCache&&this._roomsCacheConfig===this._config&&this._roomsCacheRegistry===this._registry&&this._roomsCacheStateCount===stateCount)return this._roomsCache;
     const {areas,entities,devices}=this._registry;
     const deviceArea=new Map((devices||[]).filter(d=>d?.id).map(d=>[d.id,d.area_id]));
     const ignored=new Set(['update','event','time','date','text','diagnostic','sun','zone','persistent_notification','device_tracker','person']);
@@ -505,7 +522,26 @@ class VeltoDashboard extends HTMLElement {
       const area=e.area_id||deviceArea.get(e.device_id),room=lookup.get(area);
       if(room&&room.entities.length<maxPerRoom){room.entities.push({entity:e.entity_id,size:this.autoTileSize(e.entity_id)});seen.add(e.entity_id)}
     }
-    return [...manual,...groups.filter(g=>(!this._config.hide_empty_rooms||g.entities.length)&&!manual.some(r=>r.id===g.id||r.name===g.name))];
+    const result=[...manual,...groups.filter(g=>(!this._config.hide_empty_rooms||g.entities.length)&&!manual.some(r=>r.id===g.id||r.name===g.name))];
+    if(manual.length===0){this._roomsCache=result;this._roomsCacheConfig=this._config;this._roomsCacheRegistry=this._registry;this._roomsCacheStateCount=stateCount}
+    return result;
+  }
+  attributeSignature(attributes){
+    if(!attributes||typeof attributes!=='object')return '';
+    const cached=this._attributeSignatureCache?.get(attributes);
+    if(cached!==undefined)return cached;
+    const signature=[attributes.friendly_name,attributes.unit_of_measurement,attributes.device_class,attributes.entity_picture,attributes.media_image_url,attributes.media_title,attributes.media_artist,attributes.app_name,attributes.source,attributes.volume_level,attributes.media_duration,attributes.media_position,attributes.supported_features,Array.isArray(attributes.supported_color_modes)?attributes.supported_color_modes.join(','):attributes.supported_color_modes,attributes.brightness,attributes.percentage,attributes.temperature,attributes.current_temperature,attributes.hvac_action,attributes.current_position,attributes.battery_level,attributes.status].map(value=>value==null?'':String(value)).join('|');
+    this._attributeSignatureCache.set(attributes,signature);return signature
+  }
+  signatureModel(){
+    const rooms=this.getRooms(),cacheable=Boolean(this._config.auto_areas&&this._registry&&(!Array.isArray(this._config.rooms)||this._config.rooms.length===0));
+    if(cacheable&&this._signatureModel?.rooms===rooms&&this._signatureModel?.config===this._config)return this._signatureModel;
+    const ids=new Set(rooms.flatMap(r=>(r.entities||[]).map(e=>typeof e==='string'?e:e.entity)));
+    if(this._config.presence?.entity)ids.add(this._config.presence.entity);
+    for(const id of Object.values(this._config.weather?.entities||{}))if(id)ids.add(id);
+    const forecastWeatherId=this.weatherForecastEntity();if(forecastWeatherId)ids.add(forecastWeatherId);
+    const model={rooms,config:this._config,entityIds:[...ids].sort(),roomSignature:rooms.map(r=>[r.id,r.name,(r.entities||[]).map(e=>typeof e==='string'?e:e.entity).join(',')].join(':')).join('|')};
+    if(cacheable)this._signatureModel=model;return model;
   }
   getCardSize(){return 8}
   static getStubConfig(){return {title:'Księstwo',auto_areas:true,hide_empty_rooms:true,theme:'auto',smart_layout:true,show_diagnostics:false,max_auto_entities:24,show_home_highlights:true,home_highlight_limit:8,room_controls:true,scene_shortcuts:true,layout_persistence:'hybrid',rooms:[]}}
@@ -564,6 +600,7 @@ class VeltoDashboard extends HTMLElement {
     for(const [days,title] of [[1,'24 h'],[7,'7 dni'],[30,'30 dni']]){const b=make('button','velto-history-range',title);b.type='button';b.addEventListener('click',()=>load(days));ranges.append(b);buttons.push([b,days])}
     exit.focus();load(1);
   }
+  calendarTitleText(summary){return String(summary||'Wydarzenie')}
   weatherNumber(id){const raw=this.text(id);if(raw===null||raw===undefined)return null;const value=String(raw).trim();if(!value||['unknown','unavailable','none','null','nan'].includes(value.toLowerCase()))return null;const num=Number(value.replace(',','.'));return Number.isFinite(num)?num:null}
   airQualityLevel(key,value){
     if(!['pm25','pm10'].includes(key)||value===null||value===undefined||String(value).trim()==='')return 'unknown';
@@ -765,7 +802,8 @@ class VeltoDashboard extends HTMLElement {
     return document.importNode(svg,true)
   }
   icon(name,active=false){
-    const paths={
+    const cached=this._iconTemplateCache.get(name);if(cached)return cached.cloneNode(true);
+    const paths=this._iconPathDefinitions||(this._iconPathDefinitions={
       trash:['path|M3 6h18','path|M8 6V4h8v2','path|M19 6l-1 14H6L5 6','path|M10 11v5','path|M14 11v5'],
       recycle:['path|M12 3l3 5h-3','path|M15 8a7 7 0 0 1 5 5','path|M20 13l-1 4-4-1','path|M19 17a7 7 0 0 1-7 4','path|M12 21l-3-3 3-2','path|M9 18a7 7 0 0 1-4-7','path|M5 11l1-4 4 1','path|M6 7a7 7 0 0 1 6-4'],
       eye:['path|M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z','circle|12 12 3'],
@@ -825,7 +863,7 @@ class VeltoDashboard extends HTMLElement {
       'weather-sun':['circle|12 12 4','path|M12 2v2','path|M12 20v2','path|M4.9 4.9l1.4 1.4','path|m17.7 17.7 1.4 1.4','path|M2 12h2','path|M20 12h2','path|m4.9 19.1 1.4-1.4','path|m17.7 6.3 1.4-1.4'],
       plug:['path|M8 3v5','path|M16 3v5','path|M7 8h10v4a5 5 0 0 1-10 0Z','path|M12 17v4'],
       generic:['rect|4 4 16 16 4','circle|12 12 3']
-    };
+    });
     const roomMdi={leaf:'mdi:leaf',toy:'mdi:toy-brick',sofa:'mdi:sofa',briefcase:'mdi:briefcase-outline',server:'mdi:server',archive:'mdi:archive-outline',sun:'mdi:weather-sunny',door:'mdi:door',home:'mdi:home-outline',light:'mdi:lightbulb-outline',plug:'mdi:power-plug-outline',water:'mdi:water-outline',climate:'mdi:thermometer'};
     if(Object.prototype.hasOwnProperty.call(roomMdi,name)){
       const haIcon=document.createElement('ha-icon');haIcon.setAttribute('icon',roomMdi[name]);haIcon.setAttribute('aria-hidden','true');return haIcon
@@ -839,7 +877,7 @@ class VeltoDashboard extends HTMLElement {
       if(tag==='rect'){['x','y','width','height','rx'].forEach((k,i)=>el.setAttribute(k,args[i]))}
       svg.append(el)
     }
-    return svg
+    this._iconTemplateCache.set(name,svg.cloneNode(true));return svg
   }
   iconFor(id,state){
     const domain=id.split('.')[0],cls=state?.attributes?.device_class;
@@ -867,9 +905,13 @@ class VeltoDashboard extends HTMLElement {
   restoreScrollState(root,state){
     if(!state)return;
     for(const [node,top,left] of state.ancestors||[]){node.scrollTop=top;node.scrollLeft=left}
-    const keyedNodes=[...(root?.querySelectorAll?.('[data-velto-scroll-key]')||[])];
+    const keyedNodes=new Map();
+    for(const node of root?.querySelectorAll?.('[data-velto-scroll-key]')||[]){
+      const key=node.getAttribute?.('data-velto-scroll-key');
+      if(key&&!keyedNodes.has(key))keyedNodes.set(key,node)
+    }
     for(const [key,top,left] of state.keyed||[]){
-      const node=keyedNodes.find(item=>item.getAttribute?.('data-velto-scroll-key')===key);
+      const node=keyedNodes.get(key);
       if(node){node.scrollTop=top;node.scrollLeft=left}
     }
     if((globalThis.scrollY||0)!==state.pageY&&typeof globalThis.scrollTo==='function')globalThis.scrollTo(state.pageX,state.pageY)
@@ -888,7 +930,7 @@ class VeltoDashboard extends HTMLElement {
 .nav button.selected{background:#f7f2e9;color:#8c5c21;box-shadow:inset 2px 2px 5px #c9c0b3, inset -2px -2px 5px #fff}.nav-count{margin-left:auto;font-size:10px;font-variant-numeric:tabular-nums;color:#897b67;background:#ffffff70;padding:3px 6px;border-radius:8px;min-width:22px;text-align:center}.nav-active{width:6px;height:6px;border-radius:50%;background:#e99524;box-shadow:0 0 0 3px #e9952426;flex:none}.nav button.selected .nav-count{color:#85571f;background:#e9952420}
 .nav button:focus-visible,.tile:focus-visible,.brightness:focus-visible{outline:2px solid #e99524;outline-offset:2px}.nav button:hover:not(.selected){background:#ffffff70}.nav button{min-height:42px}
 .sidebar-note{margin-top:auto;font-size:11px;line-height:1.5;color:#908679}
-:host(:fullscreen){display:block;width:100vw;height:100vh;overflow:auto;background:var(--primary-background-color,#eeeae2)}:host(:fullscreen) .layout{min-height:100vh}
+:host(:fullscreen){display:block;width:100vw;height:100vh;height:100dvh;min-height:100vh;min-height:100dvh;overflow:auto;overscroll-behavior:contain;background:transparent}:host(:fullscreen) .layout{display:grid;width:100%;min-height:100vh;min-height:100dvh;height:auto;max-width:none;margin:0;border-radius:0;box-shadow:none}
 .velto-fullscreen{border:1px solid #cdbd9f;background:#fff8ec;color:#76542c;border-radius:12px;padding:9px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
 .velto-fullscreen:focus-visible{outline:2px solid #e99524;outline-offset:3px}.velto-fullscreen svg{display:block;width:19px;height:19px}.dark .velto-fullscreen{background:#343941;color:#e8c58d;border-color:#65615c}
 .layout.editing .tile{outline:1px dashed #e99524;outline-offset:-4px;cursor:grab}
@@ -917,8 +959,8 @@ class VeltoDashboard extends HTMLElement {
 .media-art{width:100%;max-height:110px;object-fit:cover;border-radius:12px}.tile b{display:block;font-size:13px;overflow-wrap:break-word;word-break:normal;hyphens:auto;line-height:1.35}.tile small{display:block;font-size:11px;color:#81776b;margin-top:5px;overflow-wrap:break-word;word-break:normal}.tile-wrap{min-width:0;display:flex;flex-direction:column;gap:7px}.brightness{width:100%;appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:pan-x;height:10px;margin:9px 0;border:1px solid #d5c5a8;border-radius:999px;background:linear-gradient(to right,#e99524 0%,#e99524 var(--brightness,0%),#d9d2c6 var(--brightness,0%),#d9d2c6 100%)}.brightness::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.brightness::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.dark .brightness{border-color:#6a5a46;background:linear-gradient(to right,#e3b66d 0%,#e3b66d var(--brightness,0%),#4b4b4b var(--brightness,0%),#4b4b4b 100%)}.dark .brightness::-webkit-slider-thumb,.dark .brightness::-moz-range-thumb{background:#e3b66d}.brightness:focus-visible{outline:2px solid #e99524;outline-offset:3px}.brightness-label{font-size:10px;color:#846b49}.tile:has(.brightness){min-height:160px}
 .weather{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:16px;padding:19px;border-radius:24px;background:linear-gradient(145deg,#f9f6f0,#e8e3da);box-shadow:inset 2px 2px 6px #c8c0b5,inset -2px -2px 8px #fff}
 .weather .temperature{font-size:38px;font-weight:800;letter-spacing:-.06em;margin:8px 0}
-.weather-lead{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:0}.weather-lead .weather-clock{display:block;margin-top:9px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;font-size:clamp(23px,2vw,29px);font-weight:500;letter-spacing:-.055em;line-height:1.05;color:#71695f;font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'ss01' 1}.dark .weather-lead .weather-clock{color:#d0c7ba}
-@media(max-width:780px){.weather-lead{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'eyebrow eyebrow' 'temperature clock' 'air air';align-items:center;column-gap:12px;row-gap:3px}.weather-lead .eyebrow{grid-area:eyebrow}.weather-lead .temperature{grid-area:temperature;margin:5px 0;font-size:clamp(34px,9vw,44px)}.weather-lead .weather-clock{grid-area:clock;justify-self:end;align-self:center;margin:0;padding:7px 11px;border-radius:13px;background:#e9e3d9a8;box-shadow:inset 1px 1px 3px #c9c1b5,inset -1px -1px 3px #fff8;font-size:clamp(20px,5vw,24px);letter-spacing:-.06em;white-space:nowrap}.dark .weather-lead .weather-clock{background:#252c34;color:#f0e5d5;box-shadow:inset 1px 1px 3px #151a20,inset -1px -1px 3px #48515b}.weather-lead .air{grid-area:air}}.weather .air{font-size:12px;font-weight:650;color:#77736e}.weather .air-good{color:#317b50}.weather .air-moderate{color:#aa6800}.weather .air-bad{color:#b13f37}.dark .weather .air-good{color:#87d4a2}.dark .weather .air-moderate{color:#f3c477}.dark .weather .air-bad{color:#ff9d91}
+.weather-lead{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:0}.weather-lead .weather-clock{display:inline-flex;align-items:center;justify-content:center;margin-top:8px;padding:8px 12px;border:1px solid #ffffffa8;border-radius:13px;background:#eee9e0a8;box-shadow:inset 1px 1px 3px #c9c1b5,inset -1px -1px 3px #fff8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;font-size:clamp(23px,2vw,29px);font-weight:500;letter-spacing:-.055em;line-height:1.05;color:#71695f;font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'ss01' 1;white-space:nowrap}.dark .weather-lead .weather-clock{background:#252c34;border-color:#48515b;color:#f0e5d5;box-shadow:inset 1px 1px 3px #151a20,inset -1px -1px 3px #48515b}
+@media(max-width:780px){.weather-lead{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'eyebrow eyebrow' 'temperature clock' 'air air';align-items:center;column-gap:12px;row-gap:3px}.weather-lead .eyebrow{grid-area:eyebrow}.weather-lead .temperature{grid-area:temperature;margin:5px 0;font-size:clamp(34px,9vw,44px)}.weather-lead .weather-clock{grid-area:clock;justify-self:end;align-self:center;margin:0;font-size:clamp(20px,5vw,24px);letter-spacing:-.06em}.weather-lead .air{grid-area:air}}.weather .air{font-size:12px;font-weight:650;color:#77736e}.weather .air-good{color:#317b50}.weather .air-moderate{color:#aa6800}.weather .air-bad{color:#b13f37}.dark .weather .air-good{color:#87d4a2}.dark .weather .air-moderate{color:#f3c477}.dark .weather .air-bad{color:#ff9d91}
 .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{border-radius:13px;background:#ebe6dd;padding:10px 12px;min-width:0}.metric small{display:block;font-size:10px;color:#81786d}.metric strong{font-size:15px;display:block;margin-top:6px;overflow-wrap:anywhere}.pm-metric{border:1px solid #e6ddcf;border-radius:16px}.pm-very-good{background:#dff4e6}.pm-good{background:#eaf4dc}.pm-moderate{background:#fff0c7}.pm-sufficient{background:#ffe0b8}.pm-bad{background:#ffdcd5}.pm-very-bad{background:#f4cbd3}.pm-unknown{background:#f0ede8}.pm-label{display:block;font-size:11px;font-weight:700;margin-top:5px;color:#51483f}.dark .pm-very-good{background:#1d4935}.dark .pm-good{background:#344a2d}.dark .pm-moderate{background:#514023}.dark .pm-sufficient{background:#5a3925}.dark .pm-bad{background:#58312e}.dark .pm-very-bad{background:#5a2635}.dark .pm-unknown{background:#303640}.dark .pm-label{color:#fff1dc}
 .weather-forecast{grid-column:1/-1;margin-top:4px}.forecast-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px}.forecast-head strong{font-size:12px}.forecast-head small{font-size:10px;color:#8a8176}.forecast-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;overflow-x:auto;padding-bottom:2px;scroll-snap-type:x proximity;overscroll-behavior-x:contain}.forecast-strip:focus-visible{outline:2px solid #e99524;outline-offset:4px;border-radius:12px}.forecast-day{min-width:0;padding:10px 8px;border-radius:14px;background:#f2ede5;border:1px solid #ffffffb0;text-align:center;display:grid;gap:5px;scroll-snap-align:start}@container (max-width:780px){.forecast-strip{grid-template-columns:repeat(7,minmax(105px,1fr))}.forecast-day{min-width:105px}}.forecast-day .forecast-name{font-size:10px;font-weight:800;text-transform:capitalize;color:#766d62}.forecast-day .forecast-symbol{font-size:28px;line-height:1.2;color:#d8871a;display:inline-block;transform-origin:center}.forecast-day .forecast-symbol svg{width:28px;height:28px;display:block;margin:auto}.forecast-sunny .forecast-symbol{color:#f59e0b;animation:velto-weather-glow 3.5s ease-in-out infinite}.forecast-wet .forecast-symbol{color:#4b9bd3;animation:velto-weather-float 2.7s ease-in-out infinite}.forecast-cloudy .forecast-symbol{color:#8399ad;animation:velto-weather-float 4s ease-in-out infinite}.forecast-snowy .forecast-symbol{color:#63b5df;animation:velto-weather-float 3.4s ease-in-out infinite}@keyframes velto-weather-glow{50%{transform:scale(1.14);filter:drop-shadow(0 0 5px #fbbf24aa)}}@keyframes velto-weather-float{50%{transform:translateY(-3px)}}@media(prefers-reduced-motion:reduce){.forecast-day .forecast-symbol{animation:none!important}}.forecast-day .forecast-temp{font-size:13px;font-weight:800}.forecast-day .forecast-low{font-size:10px;color:#8c8378}.forecast-day .forecast-rain{font-size:9px;color:#6f7d89}.forecast-status{grid-column:1/-1;padding:9px 10px;border-radius:11px;background:#f4f0e9;font-size:11px;color:#80766a}.dark .forecast-day{background:#303640;border-color:#454c55}.dark .forecast-day .forecast-name,.dark .forecast-day .forecast-low,.dark .forecast-head small{color:#b9b1a7}.dark .forecast-day .forecast-symbol{color:#efc784}.dark .forecast-status{background:#303640;color:#c9c1b7}
  .empty{padding:18px;color:#8b8173;font-size:13px}.empty-start{margin:10px 0 18px;border:1px dashed #c4b7a6;border-radius:17px;background:#f6f2eb;line-height:1.6}.dark .empty-start{background:#303640;border-color:#60646a;color:#d6cec1}.hint{margin-top:18px;font-size:11px;color:#8f867a}
@@ -954,7 +996,7 @@ class VeltoDashboard extends HTMLElement {
 @container(min-width:621px) and (max-width:1120px){.weather .forecast-strip{grid-template-columns:repeat(6,minmax(0,1fr))}}
 
 /* Mobile compact sidebar and fullscreen fallback for iOS WebKit */
-.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:99999!important;width:100vw!important;height:100vh!important;height:100dvh!important;box-sizing:border-box!important;overflow:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch!important;border-radius:0!important;padding:calc(14px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) calc(14px + env(safe-area-inset-left,0px))!important;background:var(--primary-background-color,#eeeae2)}
+.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:99999!important;display:grid!important;width:100vw!important;min-width:0!important;max-width:none!important;height:100vh!important;height:100dvh!important;min-height:100vh!important;min-height:100dvh!important;box-sizing:border-box!important;margin:0!important;overflow:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch!important;border-radius:0!important;box-shadow:none!important;padding:calc(14px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) calc(14px + env(safe-area-inset-left,0px))!important;background:var(--primary-background-color,#eeeae2)}
 .layout.fullscreen-fallback .top{position:sticky;top:0;z-index:20;padding:8px 0;background:var(--card-background-color,#fff)}
 .layout.fullscreen-fallback.dark .top{background:#252a31}
 @media(max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
@@ -988,7 +1030,7 @@ class VeltoDashboard extends HTMLElement {
 
 /* Final mobile overrides: keep room buttons compact, forecast cards isolated and calendar actions legible */
 @media(max-width:780px){.layout .sidebar .nav button{max-width:140px!important}.layout.sidebar-collapsed .sidebar .nav button{width:44px!important;max-width:44px!important}.layout .forecast-strip{grid-auto-columns:112px!important;grid-auto-flow:column!important;grid-template-columns:none!important;justify-content:start!important}.layout .forecast-strip .forecast-day{margin:0!important;transform:none!important;position:relative!important;left:auto!important;right:auto!important}}
-.calendar-privacy,.calendar-compact-toggle{color:#a96a17!important;background:#fff7e9!important;border-color:#dfb977!important;min-width:34px;min-height:34px;font-size:19px!important;font-weight:700!important}.calendar-privacy:disabled,.calendar-compact-toggle:disabled{opacity:.4;cursor:default}.calendar-private .calendar-event-title{filter:blur(7px)!important;opacity:.9!important}.calendar-private .calendar-event-title::selection{background:transparent}
+.calendar-privacy,.calendar-compact-toggle{color:#a96a17!important;background:#fff7e9!important;border-color:#dfb977!important;min-width:34px;min-height:34px;font-size:19px!important;font-weight:700!important}.calendar-privacy:disabled,.calendar-compact-toggle:disabled{opacity:.4;cursor:default}.calendar-private .calendar-event-title{filter:blur(8px)!important;opacity:.9!important;pointer-events:none!important;user-select:none!important;-webkit-user-select:none!important}.calendar-private .calendar-event-title::selection{background:transparent}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 /* Unified accessible calendar toolbar, including dark mode */
 .calendar-actions{gap:6px}.calendar-actions button.calendar-refresh,.calendar-actions button.calendar-privacy,.calendar-actions button.calendar-compact-toggle{display:inline-flex!important;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 32px;width:32px;height:32px;min-height:32px;padding:0!important;border:1px solid #bfa57c!important;border-radius:9px!important;background:#f5f0e7!important;color:#514333!important;font:700 19px/1 system-ui,sans-serif!important;box-shadow:none!important;opacity:1!important}.calendar-actions button.calendar-privacy[aria-pressed=true]{background:#f5deb9!important}.dark .calendar-actions button.calendar-refresh,.dark .calendar-actions button.calendar-privacy,.dark .calendar-actions button.calendar-compact-toggle{background:#343b45!important;border-color:#7e8997!important;color:#f4e9d8!important}.dark .calendar-actions button.calendar-privacy[aria-pressed=true]{background:#594a31!important;color:#ffe4a5!important}.calendar-actions button:focus-visible{outline:2px solid #e99524;outline-offset:2px}.calendar-actions button.calendar-refresh svg,.calendar-actions button.calendar-privacy svg,.calendar-actions button.calendar-compact-toggle svg{width:17px;height:17px;display:block;flex:none}
 
@@ -1013,18 +1055,39 @@ class VeltoDashboard extends HTMLElement {
 .layout.fullscreen-fallback .top{position:static!important;top:auto!important;z-index:auto;padding:0;margin-bottom:22px;background:transparent!important}
 .layout.fullscreen-fallback.dark .top{background:transparent!important}
 @container(max-width:620px){.waste-actions{gap:5px}.waste-actions>small{font-size:10px}.waste-compact-toggle{width:30px;height:30px;min-width:30px;min-height:30px}}
-/* iPad landscape and native Safari fullscreen: override legacy compact/mobile forecast rules. */
+/* iPad landscape and native Safari fullscreen: keep weather columns fluid; forecast density follows the card container, not device pixel width. */
 @media (min-width:781px) and (max-width:1366px){
   .layout .weather{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr)!important;align-items:start!important}
   .layout .weather>.weather-forecast{grid-column:1/-1!important;grid-row:auto!important;display:block!important;width:100%!important;min-width:0!important}
-  .layout .weather .weather-forecast .forecast-strip{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;gap:8px!important;width:100%!important;min-width:0!important;max-width:100%!important;overflow:visible!important}
   .layout .weather .weather-forecast .forecast-day{display:grid!important;box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:none!important;overflow:hidden!important;padding:10px 5px!important}
   .layout .weather .weather-forecast .forecast-day>*{min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important;white-space:normal!important;text-overflow:clip!important}
+}
+/* Tablet forecast: give each day enough room instead of squeezing six cards into a narrow row. */
+@container (min-width:621px) and (max-width:900px){
+  .layout .weather .weather-forecast .forecast-strip{grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;overflow:visible!important;gap:9px!important}
+  .layout .weather .weather-forecast .forecast-day{min-width:0!important;max-width:none!important;padding:12px 8px!important}
+  .layout .weather .weather-forecast .forecast-day .forecast-symbol{font-size:30px}
+}
+/* Let the available card width decide forecast and agenda density across desktop, tablet and embedded views. */
+@container (min-width:621px) and (max-width:900px){
+  .layout .weather .weather-forecast .forecast-strip{grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;gap:9px!important;overflow:visible!important}
+  .layout .weather .weather-forecast .forecast-day{padding:12px 8px!important}
+}
+@container (min-width:901px){
+  .layout .weather .weather-forecast .forecast-strip{grid-template-columns:repeat(6,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-columns:minmax(0,1fr)!important;gap:8px!important;overflow:visible!important}
+}
+@container (min-width:621px){
+  .layout .calendar-list{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))!important;justify-content:stretch!important;align-items:stretch!important}
+  .layout .calendar-event{width:100%!important;max-width:none!important;min-width:0!important}
 }
 :host(:fullscreen) .layout .top,.layout.fullscreen-fallback .top{position:static!important;inset:auto!important;z-index:auto!important;align-self:auto!important;background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 :host(:fullscreen) .layout .weather,.layout.fullscreen-fallback .weather{min-width:0!important;max-width:100%!important}
 :host(:fullscreen) .layout .weather .weather-forecast,.layout.fullscreen-fallback .weather .weather-forecast{min-width:0!important}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;scroll-snap-type:none!important}}`;this._styleElement=css}root.append(css);
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;scroll-snap-type:none!important}}
+
+/* Consistent keyboard focus for dashboard and visual-editor controls. */
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role="button"]:focus-visible{outline:2px solid #e99524;outline-offset:3px}
+`;this._styleElement=css}root.append(css);
     const h=this._hass,c=this._config;
     const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
     const shell=el('div','layout'+(((this._themeOverride||c.theme)==='dark'||!this._themeOverride&&c.theme==='auto'&&this._hass?.themes?.darkMode)?' dark':'')),side=el('aside','sidebar'),brand=el('div','brand');brand.append('VEL',el('span','', 'TO'));const collapse=el('button','sidebar-collapse',this._sidebarCollapsed?'›':'‹');collapse.type='button';collapse.title=this._sidebarCollapsed?'Rozwiń menu':'Zwiń menu';collapse.setAttribute('aria-label',collapse.title);collapse.setAttribute('aria-expanded',String(!this._sidebarCollapsed));collapse.addEventListener('click',()=>{this._sidebarCollapsed=!this._sidebarCollapsed;try{globalThis.localStorage?.setItem?.('velto:sidebar:collapsed',this._sidebarCollapsed?'1':'0')}catch{}this.render()});const brandRow=el('div','brand-row');brandRow.append(brand,collapse);side.append(brandRow);if(this._sidebarCollapsed)shell.classList.add('sidebar-collapsed');if(this._fullscreenFallback)shell.classList.add('fullscreen-fallback');
@@ -1344,7 +1407,7 @@ class VeltoDashboard extends HTMLElement {
       const w=el('section','weather'),lead=el('div','weather-lead'),weatherState=forecastEntity?this.entity(forecastEntity):null;
       const sensorTemp=this.weatherNumber(wh.temperature),nativeTemp=this.weatherNumber(weatherState?.attributes?.temperature),temp=sensorTemp!==null?sensorTemp:(nativeTemp!==null?nativeTemp:null);
       lead.append(el('div','eyebrow','Na zewnątrz'));const temperatureTile=el('div','temperature',temp!==null?temp.toLocaleString('pl-PL',{maximumFractionDigits:1})+'°C':'—°C');this.bindWeatherHistory(temperatureTile,wh.temperature||forecastEntity,'Temperatura');lead.append(temperatureTile);
-      const a=this.text(wh.air_index),airKey=typeof a==='string'?a.trim().toUpperCase().replace(/[\s-]+/g,'_'):null,labels={VERY_GOOD:'Bardzo dobre powietrze',GOOD:'Dobre powietrze',MODERATE:'Umiarkowane powietrze',BAD:'Zła jakość powietrza',VERY_BAD:'Bardzo zła jakość powietrza'};const air=el('div','air '+(airKey==='BAD'||airKey==='VERY_BAD'?'air-bad':airKey==='MODERATE'?'air-moderate':airKey==='GOOD'||airKey==='VERY_GOOD'?'air-good':'air-unknown'),a?labels[airKey]||'Brak oceny':this.weatherConditionLabel(weatherState?.state));air.setAttribute('role','status');lead.append(air);const condition=weatherState?.state;if(condition&&condition!=='unknown'&&condition!=='unavailable'){const icon=el('span','weather-condition-symbol');icon.append(this.weatherConditionIcon(condition));icon.setAttribute('aria-hidden','true');air.prepend(icon)}lead.append(air);const weatherClock=el('time','weather-clock');const updateWeatherClock=()=>{const now=new Date();weatherClock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',hour12:false});weatherClock.dateTime=now.toISOString()};updateWeatherClock();lead.append(weatherClock);w.append(lead);
+      const a=this.text(wh.air_index),airKey=typeof a==='string'?a.trim().toUpperCase().replace(/[\s-]+/g,'_'):null,labels={VERY_GOOD:'Bardzo dobre powietrze',GOOD:'Dobre powietrze',MODERATE:'Umiarkowane powietrze',BAD:'Zła jakość powietrza',VERY_BAD:'Bardzo zła jakość powietrza'};const air=el('div','air '+(airKey==='BAD'||airKey==='VERY_BAD'?'air-bad':airKey==='MODERATE'?'air-moderate':airKey==='GOOD'||airKey==='VERY_GOOD'?'air-good':'air-unknown'),a?labels[airKey]||'Brak oceny':this.weatherConditionLabel(weatherState?.state));air.setAttribute('role','status');const condition=weatherState?.state;if(condition&&condition!=='unknown'&&condition!=='unavailable'){const icon=el('span','weather-condition-symbol');icon.append(this.weatherConditionIcon(condition));icon.setAttribute('aria-hidden','true');air.prepend(icon)}const weatherClock=el('time','weather-clock');const updateWeatherClock=()=>{const now=new Date();weatherClock.textContent=now.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',hour12:false});weatherClock.dateTime=now.toISOString()};updateWeatherClock();lead.append(weatherClock,air);w.append(lead);
       const metrics=el('div','metrics');for(const [key,label,unit] of [['humidity','Wilgotność','%'],['pressure','Ciśnienie','hPa'],['pm25','PM2.5','µg/m³'],['pm10','PM10','µg/m³']]){let num=this.weatherNumber(wh[key]);if(num===null&&weatherState&&['humidity','pressure'].includes(key)){const raw=weatherState.attributes?.[key];const native=raw===null||raw===undefined||raw===''?NaN:Number(raw);if(Number.isFinite(native))num=native}const v=num!==null?num.toLocaleString('pl-PL',{maximumFractionDigits:1})+' '+unit:'—';const m=el('div','metric');m.append(el('small','',label),el('strong','',v));if(key==='pm25'||key==='pm10'){const level=this.airQualityLevel(key,num);const labelText={'very-good':'● Bardzo dobra jakość powietrza',good:'● Dobra jakość powietrza',moderate:'● Umiarkowana jakość powietrza',sufficient:'● Dostateczna jakość powietrza',bad:'● Zła jakość powietrza','very-bad':'● Bardzo zła jakość powietrza',unknown:'● Brak pomiaru'}[level];m.classList.add('pm-metric','pm-'+level);m.append(el('span','pm-label',labelText),el('small','pm-explain','Skala GIOŚ · 1 h · pył '+(key==='pm25'?'drobny':'grubszy')));m.title=label+' · '+labelText+' · Progi odniesienia: Polski Indeks Jakości Powietrza GIOŚ dla stężeń 1-godzinnych; lokalny czujnik nie jest stacją GIOŚ.'}this.bindWeatherHistory(m,wh[key]||(['humidity','pressure'].includes(key)?forecastEntity:null),label);metrics.append(m)}w.append(metrics);
       if(forecastEntity&&c.weather?.show_forecast!==false){
         const forecast=el('div','weather-forecast'),head=el('div','forecast-head');head.append(el('strong','','Prognoza na '+Math.min(this._weatherForecast.length||7,7)+' dni'),el('small','',this.name(forecastEntity)));forecast.append(head);
@@ -1408,7 +1471,7 @@ class VeltoDashboard extends HTMLElement {
         const date=this.eventDate(event.start),allDay=this.eventAllDay(event.start),item=el('div','calendar-event');item.setAttribute('role','listitem');
         const dateBox=el('div','calendar-date');
         dateBox.append(el('b','',date.toLocaleDateString('pl-PL',{day:'2-digit'})),el('small','',date.toLocaleDateString('pl-PL',{month:'short'})));
-        const content=el('div','calendar-copy');const eventTitle=el('strong','calendar-event-title',event.summary||'Wydarzenie');if(this._calendarPrivate)eventTitle.setAttribute('aria-label','Tytuł ukryty');content.append(eventTitle);
+        const content=el('div','calendar-copy');const eventTitle=el('strong','calendar-event-title',this.calendarTitleText(event.summary));if(this._calendarPrivate){eventTitle.setAttribute('aria-hidden','true');content.append(eventTitle,el('span','sr-only','Tytuł wydarzenia ukryty'))}else content.append(eventTitle);
         const when=allDay?'Cały dzień':date.toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
         const source='';
         content.append(el('small','',date.toLocaleDateString('pl-PL',{weekday:'short'})+' · '+when+(source?' · '+source:'')));
@@ -1528,9 +1591,10 @@ class VeltoDashboardEditor extends HTMLElement {
     const style=document.createElement('style');style.textContent=`
 :host{display:block;font:inherit;color:var(--primary-text-color,#333)}*{box-sizing:border-box}
 .wrap{display:grid;gap:14px;padding:8px 0}.field{display:grid;gap:5px;font-size:13px;font-weight:600}
-input,select,button{font:inherit;min-height:38px;border-radius:10px;padding:8px 10px;border:1px solid var(--divider-color,#ccc);background:var(--card-background-color,#fff);color:inherit;max-width:100%}
-input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.primary{background:var(--primary-color,#c18c43);color:#fff;border:0}
-.room{border:1px solid var(--divider-color,#ddd);border-radius:15px;padding:12px;display:grid;gap:12px}.row{display:grid;grid-template-columns:minmax(0,1fr) 90px 42px;gap:7px;align-items:center}.row small{display:block;font-size:11px;opacity:.65;overflow-wrap:anywhere}
+input,select,button{font:inherit;min-height:44px;border-radius:10px;padding:9px 11px;border:1px solid var(--divider-color,#ccc);background:var(--card-background-color,#fff);color:inherit;max-width:100%}
+input,select{width:100%}button{cursor:pointer}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--primary-color,#c18c43);outline-offset:3px}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.primary{background:var(--primary-color,#c18c43);color:#fff;border:0}
+.room{border:1px solid var(--divider-color,#ddd);border-radius:15px;padding:12px;display:grid;gap:12px}.search-picker{display:grid;gap:6px;min-width:0}.search-picker input{min-height:40px}.row{display:grid;grid-template-columns:minmax(0,1fr) 90px 42px;gap:7px;align-items:center}.row small{display:block;font-size:11px;opacity:.65;overflow-wrap:anywhere}
 .muted{font-size:12px;opacity:.7}.section{font-weight:750;margin:5px 0 0}
 .setup{padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:18px;background:var(--card-background-color,#fff);display:grid;gap:13px}.setup h3{margin:0;font-size:19px}.setup p{margin:0;line-height:1.45}.setup-ok{font-size:12px;font-weight:700;color:var(--success-color,#4b8b54)}.advanced-toggle{background:transparent}
 .discovery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.discovery div{padding:10px;border-radius:12px;background:color-mix(in srgb,var(--card-background-color,#fff) 80%,var(--primary-color,#c18c43) 8%);text-align:center}.discovery b{display:block;font-size:18px}.discovery small{font-size:10px;opacity:.7}.setup-status{font-size:12px;padding:9px 10px;border-radius:10px;background:var(--secondary-background-color,#f5f5f5)}@media(max-width:520px){.discovery{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -1541,6 +1605,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     const field=(label,value,fn)=>{const l=node('label',undefined,'field');l.append(node('span',label));const i=document.createElement('input');i.value=value||'';i.addEventListener('change',()=>fn(i.value));l.append(i);return l};
     const button=(label,fn,cls)=>{const b=node('button',label,cls);b.type='button';b.addEventListener('click',fn);return b};
     const choose=(options,value,fn)=>{const s=document.createElement('select');for(const [v,label] of options){const o=document.createElement('option');o.value=v;o.textContent=label;s.append(o)}s.value=value||'';s.addEventListener('change',()=>fn(s.value));return s};
+    const searchChoose=(options,value,fn,placeholder='Szukaj…')=>{const box=node('div',undefined,'search-picker'),search=document.createElement('input'),select=choose(options,value,fn);search.type='search';search.placeholder=placeholder;search.setAttribute('aria-label',placeholder);search.autocomplete='off';search.addEventListener('input',()=>{const query=search.value.trim().toLocaleLowerCase();const selected=select.value;select.replaceChildren();for(const [v,label] of options){if(!query||String(label).toLocaleLowerCase().includes(query)||String(v).toLocaleLowerCase().includes(query)||v===selected){const option=document.createElement('option');option.value=v;option.textContent=label;select.append(option)}}if([...select.options].some(option=>option.value===selected))select.value=selected;else select.value=''});box.append(search,select);Object.defineProperty(box,'value',{get:()=>select.value});box.focus=()=>search.focus();return box};
     const c=this._config,rooms=c.rooms||[],set=(patch)=>this.commit({...this._config,...patch});
     const summary=this.setupSummary();
     const setup=node('section',undefined,'setup');
@@ -1619,7 +1684,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     const pinned=Array.isArray(c.home_favorites)?c.home_favorites.filter(id=>typeof id==='string'):[];
     const favoriteDomains=new Set(['light','switch','fan','cover','climate','media_player','lock','vacuum','camera','input_boolean','alarm_control_panel','binary_sensor','sensor','weather']);
     const favoriteIds=Object.keys(this._hass?.states||{}).filter(id=>favoriteDomains.has(id.split('.')[0])).sort();
-    const favoritePicker=choose([['','Wybierz urządzenie…'],...favoriteIds.filter(id=>!pinned.includes(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{});
+    const favoritePicker=searchChoose([['','Wybierz urządzenie…'],...favoriteIds.filter(id=>!pinned.includes(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{},'Szukaj urządzenia do przypięcia…');
     wrap.append(favoritePicker);
     wrap.append(button('＋ Przypnij urządzenie',()=>{if(favoritePicker.value)set({home_favorites:[...pinned,favoritePicker.value]})}));
     for(const id of pinned){
@@ -1651,7 +1716,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
         panel.append(entry);
       }
       const ids=Object.keys(this._hass?.states||{}).sort(),existing=new Set((room.entities||[]).map(e=>typeof e==='string'?e:e.entity));
-      const picker=choose([['','Wybierz urządzenie…'],...ids.filter(id=>!existing.has(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{});
+      const picker=searchChoose([['','Wybierz urządzenie…'],...ids.filter(id=>!existing.has(id)).map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],'',()=>{},'Szukaj urządzenia w tym pokoju…');
       panel.append(picker);
       panel.append(button('＋ Dodaj urządzenie',()=>{if(picker.value)updateRoom({entities:[...(room.entities||[]),{entity:picker.value,size:'small'}]})},'primary'));
       wrap.append(panel);
@@ -1671,7 +1736,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     const calendarField=node('label',undefined,'field');calendarField.append(node('span','Dodaj kalendarz'));
     const available=calOptions.filter(([id])=>!id||!selected.includes(id));
     const selectable=available.filter(([id])=>id);
-    const calendarPicker=choose([['','Wybierz kalendarz…'],...selectable],selectable.length===1?selectable[0][0]:'',()=>{});
+    const calendarPicker=searchChoose([['','Wybierz kalendarz…'],...selectable],selectable.length===1?selectable[0][0]:'',()=>{},'Szukaj kalendarza…');
     calendarField.append(calendarPicker);wrap.append(calendarField);
     if(!calendars.length)wrap.append(node('p','Brak encji calendar.*. Dodaj integrację kalendarza w Home Assistant i odśwież edytor.','muted'));
     else if(!selectable.length)wrap.append(node('p','Wszystkie dostępne kalendarze są już dodane.','muted'));
@@ -1699,7 +1764,7 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
     wrap.append(field('Tytuł pogody',weather.title||'Warunki na zewnątrz',v=>set({weather:{...this._config.weather,title:v}})));
     const weatherEntities=Object.keys(this._hass?.states||{}).filter(id=>id.startsWith('weather.')).sort(),forecastCurrent=weather.forecast_entity||'';
     const forecastSource=node('label',undefined,'field');forecastSource.append(node('span','Źródło prognozy 7-dniowej'));
-    forecastSource.append(choose([['','Automatycznie (jeśli jest jedna encja weather.*)'],...weatherEntities.map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],forecastCurrent,v=>set({weather:{...this._config.weather,forecast_entity:v}})));wrap.append(forecastSource);
+    forecastSource.append(searchChoose([['','Automatycznie (jeśli jest jedna encja weather.*)'],...weatherEntities.map(id=>[id,(this._hass.states[id]?.attributes?.friendly_name||id)+' · '+id])],forecastCurrent,v=>set({weather:{...this._config.weather,forecast_entity:v}}),'Szukaj źródła prognozy…'));wrap.append(forecastSource);
     const showForecast=node('label',undefined,'field');showForecast.append(node('span','Pokazuj prognozę na kolejne 7 dni'));
     const showForecastCheck=document.createElement('input');showForecastCheck.type='checkbox';showForecastCheck.style.width='auto';showForecastCheck.checked=weather.show_forecast!==false;showForecastCheck.addEventListener('change',()=>set({weather:{...this._config.weather,show_forecast:showForecastCheck.checked}}));showForecast.append(showForecastCheck);wrap.append(showForecast);
     const weatherRooms=node('label',undefined,'field');weatherRooms.append(node('span','Pokazuj pogodę także w widokach pokoi'));const weatherRoomsCheck=document.createElement('input');weatherRoomsCheck.type='checkbox';weatherRoomsCheck.style.width='auto';weatherRoomsCheck.checked=!!weather.show_in_rooms;weatherRoomsCheck.addEventListener('change',()=>set({weather:{...this._config.weather,show_in_rooms:weatherRoomsCheck.checked}}));weatherRooms.append(weatherRoomsCheck);wrap.append(weatherRooms);
@@ -1708,9 +1773,9 @@ input,select{width:100%}button{cursor:pointer}.actions{display:flex;gap:8px;flex
       const currentId=current[key]||'',options=[['','Brak'],...sensors.map(id=>[id,(this._hass.states[id].attributes.friendly_name||id)+' · '+id])];
       if(currentId&&!sensors.includes(currentId))options.push([currentId,currentId]);
       const l=node('label',undefined,'field');l.append(node('span',label));
-      l.append(choose(options,currentId,v=>{
+      l.append(searchChoose(options,currentId,v=>{
         const old=this._config.weather||{};set({weather:{...old,entities:{...(old.entities||{}),[key]:v}}})
-      }));wrap.append(l)
+      },'Szukaj czujnika: '+label+'…'));wrap.append(l)
     }
     wrap.append(node('p','Pola pogodowe można teraz konfigurować wizualnie. Zmiany zapisują się w YAML karty.','muted'));
     wrap.append(node('div','Odbiór odpadów','section'));
