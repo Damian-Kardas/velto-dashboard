@@ -88,11 +88,13 @@ class VeltoDashboard extends HTMLElement {
   scheduleRender(){
     this._renderPending=true;
     if(this.isConnected===false)return;
+    if(this.isConnected===true&&globalThis.document?.hidden===true)return;
     if(this.isConnected!==true){this._renderPending=false;this.render();return}
     if(this._renderFrame!==null)return;
     const flush=()=>{
       this._renderFrame=null;this._cancelRenderFrame=null;
       if(this.isConnected===false)return;
+      if(this.isConnected===true&&globalThis.document?.hidden===true)return;
       this._renderPending=false;this.render()
     };
     if(typeof globalThis.requestAnimationFrame==='function'){
@@ -126,7 +128,9 @@ class VeltoDashboard extends HTMLElement {
     if(!this._visibilityListener){
       this._visibilityListener=()=>{
         if(globalThis.document?.hidden)return;
-        this.render();this.scheduleDayRefresh();this.loadCalendar(true);this.loadWeatherForecast(true);
+        this.scheduleDayRefresh();
+        if(this._renderPending)this.scheduleRender();else this.render();
+        this.loadCalendar(true);this.loadWeatherForecast(true);
       };
       document.addEventListener('visibilitychange',this._visibilityListener);
     }
@@ -798,6 +802,7 @@ class VeltoDashboard extends HTMLElement {
     return ({light:'light',switch:'switch',fan:'fan',cover:'cover',lock:'lock',climate:'climate',sensor:'sensor',binary_sensor:'binary_sensor',scene:'scene',camera:'camera',input_boolean:'input_boolean',media_player:'media_player',vacuum:'vacuum',script:'script',button:'button',input_button:'button',automation:'automation',humidifier:'humidifier',water_heater:'climate',alarm_control_panel:'alarm_control_panel',remote:'remote',number:'number',input_number:'number',select:'select',input_select:'select',weather:'weather',sun:'sun'})[domain]||'generic'
   }
   render(){
+    if(this.isConnected===true&&globalThis.document?.hidden===true){this._renderPending=true;return}
     const root=this.shadowRoot;if(!root)return;const openDialog=root.querySelector?.('.velto-modal-backdrop');const activeElement=root.activeElement;const dialogFocus=openDialog&&activeElement&&openDialog.contains?.(activeElement)?activeElement:null;const focusKey=activeElement?.getAttribute?.('data-velto-focus-key')||null;const scrollPositions=[];for(let node=this;node;node=node.parentNode||node.host){if(node.scrollTop>0||node.scrollLeft>0)scrollPositions.push([node,node.scrollTop,node.scrollLeft])}const innerScrollPositions=[];for(const node of root.querySelectorAll?.('[data-velto-scroll-key]')||[]){const key=node.getAttribute?.('data-velto-scroll-key');if(key&&(node.scrollTop>0||node.scrollLeft>0))innerScrollPositions.push([key,node.scrollTop,node.scrollLeft])}const pageY=globalThis.scrollY||0,pageX=globalThis.scrollX||0;root.replaceChildren();
     const css=document.createElement('style');css.textContent=`
 
