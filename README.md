@@ -71,9 +71,36 @@ The weather card uses the six-level Polish GIOŚ Air Quality Index reference ban
 
 The header button first requests the browser Fullscreen API. Some iOS Safari and Home Assistant webview combinations do not allow arbitrary dashboard elements to enter native fullscreen, so VELTO falls back to a fixed, full-viewport layout with safe-area padding for notches and home indicators. The header remains available while scrolling. Exit with the same fullscreen button or press **Escape** when a hardware keyboard is connected. This is a presentation fallback, not kiosk mode or an access-control boundary.
 
+## Calendar privacy and compact view
+
+The calendar toolbar uses inline SVG controls for refresh, title privacy and expand/collapse. On phones, when more than three events are loaded, VELTO starts in compact mode with the first three visible; expand it to show all events up to the configured limit. Desktop starts expanded, and a manual choice is preserved during later calendar refreshes. In privacy mode, event titles are visually blurred and locations are omitted. This is visual privacy only, not access control.
+
 ## Updating
 
 Once installed through HACS, update VELTO from HACS instead of manually replacing files in `/config/www`.
+
+### If Redownload does not change the dashboard
+
+1. In **Settings → Dashboards → Resources**, confirm there is only one VELTO resource: `/hacsfiles/velto-dashboard/velto-dashboard.js`, with type **JavaScript module**.
+2. In browser developer tools, open **Network**, filter for `velto-dashboard.js`, and reload once. Check the request status, response size and initiator. A 404 indicates a missing resource; a 200 with old content suggests browser/proxy caching or a duplicate resource.
+3. Do not repeatedly reinstall or remove a working resource until the new HACS card loads. Keep your previous dashboard as a fallback.
+
+For a quick read-only check from the browser console on your Home Assistant origin:
+
+```js
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(), 10000);
+fetch('/hacsfiles/velto-dashboard/velto-dashboard.js?check=' + Date.now(), {
+  cache: 'no-store', signal: controller.signal
+}).then(async response => {
+  const source = await response.text();
+  console.log({status: response.status, bytes: source.length,
+    hasThemeToggle: source.includes('velto:theme:override')});
+}).catch(error => console.warn('VELTO resource check:', error.message))
+  .finally(() => clearTimeout(timer));
+```
+
+Do not share authentication tokens or full HAR captures when asking for help.
 
 ## Status
 
