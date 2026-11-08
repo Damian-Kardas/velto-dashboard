@@ -94,7 +94,10 @@ class VeltoDashboard extends HTMLElement {
   connectedCallback(){
     if(!this._dayTimer)this.scheduleDayRefresh();
     if(!this._fullscreenListener){
-      this._fullscreenListener=()=>this.updateFullscreenButton();
+      this._fullscreenListener=()=>{
+        if(document.fullscreenElement===this&&this._fullscreenFallback)this.exitFullscreenFallback();
+        else this.updateFullscreenButton()
+      };
       document.addEventListener('fullscreenchange',this._fullscreenListener);
     }
     if(!this._visibilityListener){
@@ -132,6 +135,8 @@ class VeltoDashboard extends HTMLElement {
     if(this._weatherTimer){clearInterval(this._weatherTimer);this._weatherTimer=null}
     if(this._weatherForecastUnsub){try{this._weatherForecastUnsub()}catch{}this._weatherForecastUnsub=null}
     if(this._fullscreenListener){document.removeEventListener('fullscreenchange',this._fullscreenListener);this._fullscreenListener=null}
+    if(this._fullscreenFallbackKeyListener){document.removeEventListener('keydown',this._fullscreenFallbackKeyListener);this._fullscreenFallbackKeyListener=null}
+    this._fullscreenFallback=false;
     if(this._visibilityListener){document.removeEventListener('visibilitychange',this._visibilityListener);this._visibilityListener=null}
     if(this._storageListener){globalThis?.removeEventListener?.('storage',this._storageListener);this._storageListener=null}
     this._closeDetails?.()
@@ -152,11 +157,29 @@ class VeltoDashboard extends HTMLElement {
     const button=this.shadowRoot?.querySelector?.('.velto-fullscreen');
     if(!button)return;
     const active=document.fullscreenElement===this||!!this._fullscreenFallback;
-    button.textContent=active?'⤡':'⛶';button.title=active?'Zamknij pełny ekran':'Pełny ekran';button.setAttribute('aria-label',button.title);
+    button.replaceChildren(this.icon(active?'compress':'expand'));
+    button.title=active?'Zamknij pełny ekran':'Pełny ekran';button.setAttribute('aria-label',button.title);
     button.setAttribute('aria-pressed',String(active));
   }
+  enableFullscreenFallback(){
+    this._fullscreenFallback=true;
+    if(!this._fullscreenFallbackKeyListener){
+      this._fullscreenFallbackKeyListener=e=>{
+        if(e?.key!=='Escape')return;
+        e.preventDefault?.();this.exitFullscreenFallback()
+      };
+      document.addEventListener('keydown',this._fullscreenFallbackKeyListener)
+    }
+    this.render();this.updateFullscreenButton()
+  }
+  exitFullscreenFallback(){
+    if(!this._fullscreenFallback)return;
+    this._fullscreenFallback=false;
+    if(this._fullscreenFallbackKeyListener){document.removeEventListener('keydown',this._fullscreenFallbackKeyListener);this._fullscreenFallbackKeyListener=null}
+    this.render();this.updateFullscreenButton()
+  }
   async toggleFullscreen(){
-    if(this._fullscreenFallback){this._fullscreenFallback=false;this.render();return}
+    if(this._fullscreenFallback){this.exitFullscreenFallback();return}
     try{
       if(document.fullscreenElement===this){
         if(typeof document.exitFullscreen!=='function')throw Error('Fullscreen exit API unavailable');
@@ -173,9 +196,7 @@ class VeltoDashboard extends HTMLElement {
       }
     }catch(error){
       console.warn('VELTO native fullscreen unavailable; enabling expanded mode',error);
-      this._fullscreenFallback=true;this.render();
-      const button=this.shadowRoot?.querySelector?.('.velto-fullscreen');
-      if(button){button.title='Pełny ekran niedostępny';button.setAttribute('aria-label',button.title)}
+      this.enableFullscreenFallback();
     }
     this.updateFullscreenButton()
   }
@@ -673,6 +694,8 @@ class VeltoDashboard extends HTMLElement {
       'caret-down':['path|m6 9 6 6 6-6'],
       'caret-up':['path|m6 15 6-6 6 6'],
       'arrow-clockwise':['path|M20 7v5h-5','path|M20 12a8 8 0 1 0 1 4'],
+      expand:['path|M3 8V3h5','path|M3 3l5 5','path|M16 3h5v5','path|M21 3l-5 5','path|M3 16v5h5','path|M3 21l5-5','path|M21 16v5h-5','path|M21 21l-5-5'],
+      compress:['path|M8 3v5H3','path|M8 8 3 3','path|M16 3v5h5','path|M16 8l5-5','path|M8 21v-5H3','path|M8 16l-5 5','path|M16 21v-5h5','path|M16 16l5 5'],
       home:['path|m3 10 9-7 9 7','path|M5 9v12h14V9','path|M9 21v-7h6v7'],
       leaf:['path|M20 4C10 4 4 8 4 15a5 5 0 0 0 5 5c7 0 11-6 11-16Z','path|M5 19c3-5 7-8 12-11'],
       toy:['rect|3 12 8 8 1','rect|13 12 8 8 1','rect|8 4 8 8 1','path|M7 16h0.01','path|M17 16h0.01','path|M12 8h0.01'],
@@ -764,7 +787,7 @@ class VeltoDashboard extends HTMLElement {
 .sidebar-note{margin-top:auto;font-size:11px;line-height:1.5;color:#908679}
 :host(:fullscreen){display:block;width:100vw;height:100vh;overflow:auto;background:var(--primary-background-color,#eeeae2)}:host(:fullscreen) .layout{min-height:100vh}
 .velto-fullscreen{border:1px solid #cdbd9f;background:#fff8ec;color:#76542c;border-radius:12px;padding:9px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
-.velto-fullscreen:focus-visible{outline:2px solid #e99524;outline-offset:3px}.dark .velto-fullscreen{background:#343941;color:#e8c58d;border-color:#65615c}
+.velto-fullscreen:focus-visible{outline:2px solid #e99524;outline-offset:3px}.velto-fullscreen svg{display:block;width:19px;height:19px}.dark .velto-fullscreen{background:#343941;color:#e8c58d;border-color:#65615c}
 .layout.editing .tile{outline:1px dashed #e99524;outline-offset:-4px;cursor:grab}
 .layout.editing .tile.drag-over{outline:3px solid #e99524}
 .layout.editing .tile.touch-dragging{opacity:.75;transform:scale(1.025);z-index:4;touch-action:none}
@@ -826,7 +849,9 @@ class VeltoDashboard extends HTMLElement {
 @container(min-width:621px) and (max-width:1120px){.weather .forecast-strip{grid-template-columns:repeat(6,minmax(0,1fr))}}
 
 /* Mobile compact sidebar and fullscreen fallback for iOS WebKit */
-.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100dvh!important;overflow:auto!important;overscroll-behavior:contain;border-radius:0!important;padding-bottom:env(safe-area-inset-bottom)!important;background:var(--primary-background-color,#eeeae2)}
+.layout.fullscreen-fallback{position:fixed!important;inset:0!important;z-index:99999!important;width:100vw!important;height:100vh!important;height:100dvh!important;box-sizing:border-box!important;overflow:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch!important;border-radius:0!important;padding:calc(14px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) calc(14px + env(safe-area-inset-left,0px))!important;background:var(--primary-background-color,#eeeae2)}
+.layout.fullscreen-fallback .top{position:sticky;top:0;z-index:20;padding:8px 0;background:var(--card-background-color,#fff)}
+.layout.fullscreen-fallback.dark .top{background:#252a31}
 @media(max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
 @container (max-width:600px){.brand-row,.sidebar-collapsed .brand-row{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;width:100%}.layout.sidebar-collapsed{display:block!important}.sidebar-collapsed .sidebar{width:100%;padding:0 0 10px!important}.sidebar-collapsed .nav{display:flex;flex-direction:row;width:100%;overflow-x:auto;align-items:center;gap:6px}.sidebar-collapsed .nav button{flex:0 0 44px;width:44px;height:44px;min-height:44px;margin:0;padding:0!important}.sidebar-collapsed .brand{font-size:22px}}
 .weather-history-target{cursor:pointer;touch-action:pan-y}.weather-history-target:focus-visible{outline:2px solid #e99524;outline-offset:3px}

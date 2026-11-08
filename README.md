@@ -59,6 +59,10 @@ waste_collection:
 
 The tile calculates future Fridays automatically and displays the next collection, bin hint and countdown. It does not send notifications or create Home Assistant entities.
 
+## Mobile fullscreen
+
+The header button first requests the browser Fullscreen API. Some iOS Safari and Home Assistant webview combinations do not allow arbitrary dashboard elements to enter native fullscreen, so VELTO falls back to a fixed, full-viewport layout with safe-area padding for notches and home indicators. The header remains available while scrolling. Exit with the same fullscreen button or press **Escape** when a hardware keyboard is connected. This is a presentation fallback, not kiosk mode or an access-control boundary.
+
 ## Updating
 
 Once installed through HACS, update VELTO from HACS instead of manually replacing files in `/config/www`.
