@@ -73,9 +73,9 @@ class VeltoDashboard extends HTMLElement {
     const configuredSizes=config.tile_sizes&&typeof config.tile_sizes==='object'&&!Array.isArray(config.tile_sizes)?config.tile_sizes:{};
     this._localLayoutOrder=local;this._localTileSizes=localSizes;this._config={...config,tile_order:local?{...configured,...local}:configured,tile_sizes:localSizes?{...configuredSizes,...localSizes}:configuredSizes};this._lastSignature=null;this._registryRequest++;this._registryLoading=false;this._registryLoadingConnection=null;this._registry=null;this._registryConnection=null;this._registryFailedConnection=null;this._registryError=null;this._calendarKey='';this._calendarEvents=[];this._calendarError=null;this._calendarConnection=null;this._calendarRequest++;this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();this.render()}
   set hass(value){
-    const previousConnection=this._hass?.connection;
+    const previousConnection=this._hass?.connection,nextConnection=value?.connection;
     this._hass=value;
-    if(previousConnection&&value?.connection&&previousConnection!==value.connection){this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarRequest++;this._calendarLoading=false}
+    if(previousConnection!==nextConnection){this._calendarKey='';this._calendarConnection=null;this._calendarEvents=[];this._calendarError=null;this._calendarLastChecked=null;this._calendarRequest++;this._calendarLoading=false}
     this.loadRegistry();this.loadCalendar();this.loadWeatherForecast();
     const rooms=this.getRooms(),ids=new Set(rooms.flatMap(r=>(r.entities||[]).map(e=>typeof e==='string'?e:e.entity)));
     if(this._config.presence?.entity)ids.add(this._config.presence.entity);
@@ -316,7 +316,7 @@ class VeltoDashboard extends HTMLElement {
     if(!force&&this._calendarKey===key)return;
     if(this._calendarLoading&&this._calendarKey===key)return;
     this._calendarLoading=true;this._calendarKey=key;this._calendarConnection=connection;const request=++this._calendarRequest;
-    const start=new Date(),end=new Date(start.getTime()+days*86400000);
+    const start=new Date(),end=new Date(start.getTime());end.setDate(end.getDate()+days);
     try{
       const result=await Promise.allSettled(ids.map(async id=>{
         const path='calendars/'+encodeURIComponent(id)+'?start='+encodeURIComponent(start.toISOString())+'&end='+encodeURIComponent(end.toISOString());
