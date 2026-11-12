@@ -141,6 +141,8 @@ The advanced room editor includes an **Ikona pomieszczenia** selector with a cur
 
 ## Device detail controls
 
+Update entities open a read-only VELTO detail panel from **Więcej**. It shows installed/latest versions, the release summary and validated installation progress when Home Assistant reports it. The only action opens native Home Assistant details; VELTO never installs or skips updates and does not turn release URLs into direct links.
+
 VELTO's climate dialogs expose Home Assistant-supported fan, preset, swing and target-humidity controls; cover dialogs add tilt actions and a tilt-position slider when the entity reports those capabilities. Humidifier dialogs expose reported current/target humidity, supported operating modes and on/off actions without guessing unsupported options. Vacuum dialogs expose only the actions advertised by the current Home Assistant vacuum feature mask, including start/resume, pause, stop, return-to-dock, spot clean, locate and fan-speed selection when available. Inline light-tile brightness, detail actions and quick controls share the per-entity in-flight service lock; a pending light command disables the slider and marks the tile busy, preventing duplicate requests. VELTO does not expose raw vacuum commands or guessed room/segment IDs. `input_datetime.*` helpers also get native date/time pickers with validated `input_datetime.set_datetime` payloads and rollback on service failure. See [device control documentation](docs/DEVICE-CONTROLS.md) for supported attributes and service payloads.
 
 ## Switches and automations
@@ -166,4 +168,13 @@ Manually assign an `input_text.*` helper to a room to edit it in VELTO. Text and
 ## Timer helpers
 
 Assign a `timer.*` helper to a room to see its countdown in VELTO. Active timers use the Home Assistant `finishes_at` timestamp for a live display while the detail dialog is visible; paused timers show their saved remaining time. Idle timers can be started with their configured duration, paused timers can be resumed, and active/paused timers can be canceled. VELTO intentionally omits manual finish because `timer.finish` fires the `timer.finished` event and may trigger automations early. Cancel uses `timer.cancel`, which does not fire that event.
+
+
+## Alarm details
+
+`alarm_control_panel.*` entities expose a read-only VELTO details view with a translated state and code-requirement information. Arming, disarming and code entry remain in Home Assistant's native controls; VELTO does not collect alarm codes or send alarm service calls. The normal tile action continues to open native Home Assistant more-info, while **Więcej** opens the VELTO details view.
+
+## Update entity details
+
+`update.*` entities expose installed and available versions, release metadata, skipped-version information and validated installation progress when Home Assistant reports it. The panel is informational: installation, skipping and clearing skipped updates remain native Home Assistant actions. Release descriptions are rendered as text, and external release URLs are not automatically opened. A restart notice is shown only when Home Assistant reports `restart_required`.
 
