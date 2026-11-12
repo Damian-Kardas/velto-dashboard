@@ -49,7 +49,7 @@ const VELTO_COMMON_STATE_LABELS=Object.freeze({
   home:'W domu',not_home:'Poza domem',cleaning:'Sprząta',docked:'W stacji dokującej',idle:'Gotowy',
   paused:'Wstrzymany',returning:'Wraca do stacji',error:'Błąd',triggered:'Alarm aktywny',pending:'Oczekuje',
   arming:'Uzbrajanie',disarming:'Rozbrajanie',armed_away:'Uzbrojony · poza domem',armed_home:'Uzbrojony · w domu',
-  armed_night:'Uzbrojony · nocny',armed_custom_bypass:'Uzbrojony · tryb niestandardowy',disarmed:'Rozbrojony'
+  armed_night:'Uzbrojony · nocny',armed_vacation:'Uzbrojony · tryb wakacyjny',armed_custom_bypass:'Uzbrojony · tryb niestandardowy',disarmed:'Rozbrojony'
 });
 const VELTO_VACUUM_FEATURES=Object.freeze({PAUSE:4,STOP:8,RETURN_HOME:16,FAN_SPEED:32,LOCATE:512,CLEAN_SPOT:1024,START:8192});
 const VELTO_HUMIDIFIER_FEATURES=Object.freeze({MODES:1});
@@ -921,6 +921,10 @@ class VeltoDashboard extends HTMLElement {
     if(!state)return 'Niedostępne';
     const value=typeof state.state==='string'?state.state:'';
     if(value==='unknown'||value==='unavailable')return 'Niedostępne';
+    if(String(id||'').startsWith('update.')){
+      if(value==='on')return 'Aktualizacja dostępna';
+      if(value==='off')return 'Aktualne';
+    }
     if(String(id||'').startsWith('binary_sensor.')&&(value==='on'||value==='off')){
       const deviceClass=String(state.attributes?.device_class||'').trim().toLowerCase(),labels=VELTO_BINARY_SENSOR_STATE_LABELS[deviceClass];
       if(labels)return labels[value]
@@ -1082,7 +1086,7 @@ class VeltoDashboard extends HTMLElement {
   async action(id,kind){
     if(typeof id!=='string'||!id.includes('.'))return;
     const domain=id.split('.')[0],state=this.entity(id);
-    const details=(preferVelto=false)=>{if((['media_player','vacuum','light','camera','climate','cover','fan','humidifier','water_heater','switch'].includes(domain)||preferVelto&&['lock','valve'].includes(domain)||['number','input_number','select','input_select','input_datetime','input_text','counter','timer','input_boolean','automation'].includes(domain)||['button','input_button'].includes(domain))&&state&&!['unknown','unavailable'].includes(state.state))this.showDetails(id);else this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))};
+    const details=(preferVelto=false)=>{if((['media_player','vacuum','light','camera','climate','cover','fan','humidifier','water_heater','switch'].includes(domain)||preferVelto&&['lock','valve','alarm_control_panel','update'].includes(domain)||['number','input_number','select','input_select','input_datetime','input_text','counter','timer','input_boolean','automation'].includes(domain)||['button','input_button'].includes(domain))&&state&&!['unknown','unavailable'].includes(state.state))this.showDetails(id);else this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))};
     if(kind==='more'||!state||['unknown','unavailable'].includes(state.state)||
       !['light','switch','fan','cover','scene','script','button','input_button','input_boolean','automation','media_player','vacuum','humidifier','remote'].includes(domain)){details(kind==='more');return}
     let service='toggle';
@@ -1352,6 +1356,56 @@ class VeltoDashboard extends HTMLElement {
         });
         controls.append(toggle)
       }else panel.append(make('p','velto-modal-meta','Stan przełącznika nie jest dostępny — odśwież dane Home Assistant.'))
+    }else if(domain==='alarm_control_panel'){
+      const hero=make('div','velto-counter-hero'),value=make('strong','velto-counter-value',this.entityStateLabel(id,state));
+      hero.append(value,make('small','velto-counter-meta','Panel alarmowy Home Assistant'));
+      hero.setAttribute('role','status');hero.setAttribute('aria-live','polite');panel.append(hero);
+      if(attrs.code_arm_required===true)panel.append(make('p','velto-modal-meta','Uzbrajanie wymaga kodu.'));
+      else if(attrs.code_arm_required===false)panel.append(make('p','velto-modal-meta','Uzbrajanie nie wymaga kodu.'));
+      else panel.append(make('p','velto-modal-meta','Wymagania dotyczące kodu określa integracja Home Assistant.'));
+      const codeFormat=typeof attrs.code_format==='string'?attrs.code_format.trim().toLowerCase():'';
+      if(codeFormat==='number')panel.append(make('p','velto-modal-meta','Format kodu · numeryczny'));
+      else if(codeFormat==='text')panel.append(make('p','velto-modal-meta','Format kodu · tekstowy'));
+      panel.append(make('p','velto-modal-warning','Ze względów bezpieczeństwa VELTO nie uzbraja ani nie rozbraja alarmu i nie przechowuje kodów. Wymagane kody i dodatkowe potwierdzenia obsługuje Home Assistant.'));
+      const native=make('button','velto-modal-control','Otwórz sterowanie Home Assistant');
+      native.type='button';native.setAttribute('aria-label','Otwórz natywne sterowanie alarmem w Home Assistant');
+      native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
+      controls.append(native)
+    }else if(domain==='update'){
+      const progressActive=attrs.in_progress===true;
+      const hero=make('div','velto-counter-hero');
+      const value=make('strong','velto-counter-value',progressActive?'Trwa aktualizacja':state.state==='on'?'Aktualizacja dostępna':'Aktualne');
+      const updateKind=attrs.device_class==='firmware'?'Aktualizacja oprogramowania sprzętowego':'Aktualizacja oprogramowania';
+      hero.append(value,make('small','velto-counter-meta',updateKind));
+      hero.setAttribute('role','status');hero.setAttribute('aria-live','polite');panel.append(hero);
+      const title=typeof attrs.title==='string'?attrs.title.trim().slice(0,120):'';
+      if(title)panel.append(make('p','velto-modal-meta','Komponent · '+title));
+      const installed=typeof attrs.installed_version==='string'?attrs.installed_version.trim().slice(0,120):'';
+      const latest=typeof attrs.latest_version==='string'?attrs.latest_version.trim().slice(0,120):'';
+      if(installed)panel.append(make('p','velto-modal-meta','Zainstalowana wersja · '+installed));
+      if(latest)panel.append(make('p','velto-modal-meta','Dostępna wersja · '+latest));
+      if(typeof attrs.skipped_version==='string'&&attrs.skipped_version.trim())panel.append(make('p','velto-modal-meta','Pominięta wersja · '+attrs.skipped_version.trim().slice(0,120)));
+      if(progressActive){
+        panel.append(make('p','velto-modal-meta','Trwa instalacja aktualizacji.'));
+        const rawProgress=attrs.update_percentage;
+        const percentage=rawProgress!==null&&rawProgress!==undefined&&String(rawProgress).trim()!==''?Number(rawProgress):NaN;
+        if(Number.isFinite(percentage)&&percentage>=0&&percentage<=100){
+          const progress=make('progress','velto-update-progress');
+          progress.max=100;progress.value=percentage;progress.style.width='100%';progress.style.accentColor='#e99524';
+          progress.setAttribute('aria-label','Postęp instalacji aktualizacji');
+          progress.setAttribute('aria-valuetext',Math.round(percentage)+'%');
+          panel.append(progress,make('p','velto-modal-meta','Postęp aktualizacji · '+Math.round(percentage)+'%'));
+        }
+      }
+      if(attrs.restart_required===true)panel.append(make('p','velto-modal-meta','Po instalacji Home Assistant będzie wymagał restartu.'));
+      if(attrs.auto_update===true)panel.append(make('p','velto-modal-meta','To urządzenie lub usługa aktualizuje się automatycznie.'));
+      const summary=typeof attrs.release_summary==='string'?attrs.release_summary.trim():'';
+      if(summary)panel.append(make('p','velto-modal-meta',summary.slice(0,255)+(summary.length>255?'…':'')));
+      panel.append(make('p','velto-modal-warning','Instalacja i pomijanie aktualizacji pozostają w Home Assistant. VELTO nie uruchamia tych operacji.'));
+      const native=make('button','velto-modal-control','Otwórz szczegóły w Home Assistant');
+      native.type='button';native.setAttribute('aria-label','Otwórz natywne szczegóły aktualizacji w Home Assistant');
+      native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
+      controls.append(native)
     }else if(domain==='automation'){
       const validState=state.state==='on'||state.state==='off',enabled=state.state==='on';
       const hero=make('div','velto-counter-hero'),value=make('strong','velto-counter-value',enabled?'Włączona':'Wyłączona');
