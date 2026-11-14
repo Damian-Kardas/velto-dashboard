@@ -920,7 +920,14 @@ class VeltoDashboard extends HTMLElement {
   entityStateLabel(id,state=this.entity(id)){
     if(!state)return 'Niedostępne';
     const value=typeof state.state==='string'?state.state:'';
-    if(value==='unknown'||value==='unavailable')return 'Niedostępne';
+    if(value==='unavailable')return 'Niedostępne';
+    if(String(id||'').startsWith('event.')){
+      if(value==='unknown')return 'Brak zdarzeń';
+      const eventType=typeof state.attributes?.event_type==='string'?state.attributes.event_type.trim().slice(0,80):'';
+      const labels={ring:'Dzwonek',single_press:'Pojedyncze naciśnięcie',double_press:'Podwójne naciśnięcie',press_start:'Rozpoczęto naciśnięcie',press_end:'Zakończono naciśnięcie',long_press_start:'Rozpoczęto długie naciśnięcie',long_press_end:'Zakończono długie naciśnięcie',multi_press_ongoing:'Trwa seria naciśnięć',multi_press_end:'Zakończono serię naciśnięć'};
+      return eventType?(labels[eventType.toLowerCase()]||eventType):'Zdarzenie';
+    }
+    if(value==='unknown')return 'Niedostępne';
     if(String(id||'').startsWith('update.')){
       if(value==='on')return 'Aktualizacja dostępna';
       if(value==='off')return 'Aktualne';
@@ -1056,7 +1063,7 @@ class VeltoDashboard extends HTMLElement {
     for(const [days,title] of [[1,'24 h'],[7,'7 dni'],[30,'30 dni']]){const b=make('button','velto-history-range',title);b.type='button';b.addEventListener('click',()=>load(days));ranges.append(b);buttons.push([b,days])}
     exit.focus();load(1);
   }
-  calendarTitleText(summary){return this._calendarPrivate?'••••••••':String(summary||'Wydarzenie')}
+  calendarTitleText(summary){return String(summary||'Wydarzenie')}
   weatherNumber(id){const raw=this.text(id);if(raw===null||raw===undefined)return null;const value=String(raw).trim();if(!value||['unknown','unavailable','none','null','nan'].includes(value.toLowerCase()))return null;const num=Number(value.replace(',','.'));return Number.isFinite(num)?num:null}
   airQualityLevel(key,value){
     if(!['pm25','pm10'].includes(key)||value===null||value===undefined||String(value).trim()==='')return 'unknown';
@@ -1086,7 +1093,7 @@ class VeltoDashboard extends HTMLElement {
   async action(id,kind){
     if(typeof id!=='string'||!id.includes('.'))return;
     const domain=id.split('.')[0],state=this.entity(id);
-    const details=(preferVelto=false)=>{if((['media_player','vacuum','light','camera','climate','cover','fan','humidifier','water_heater','switch'].includes(domain)||preferVelto&&['lock','valve','alarm_control_panel','update'].includes(domain)||['number','input_number','select','input_select','input_datetime','input_text','counter','timer','input_boolean','automation'].includes(domain)||['button','input_button'].includes(domain))&&state&&!['unknown','unavailable'].includes(state.state))this.showDetails(id);else this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))};
+    const details=(preferVelto=false)=>{const supported=['media_player','vacuum','light','camera','climate','cover','fan','humidifier','water_heater','switch'].includes(domain)||preferVelto&&['lock','valve','alarm_control_panel','update','remote','event'].includes(domain)||['number','input_number','select','input_select','input_datetime','input_text','counter','timer','input_boolean','automation'].includes(domain)||['button','input_button'].includes(domain);if(supported&&state&&state.state!=='unavailable'&&(domain==='event'||state.state!=='unknown'))this.showDetails(id);else this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))};
     if(kind==='more'||!state||['unknown','unavailable'].includes(state.state)||
       !['light','switch','fan','cover','scene','script','button','input_button','input_boolean','automation','media_player','vacuum','humidifier','remote'].includes(domain)){details(kind==='more');return}
     let service='toggle';
@@ -1311,7 +1318,7 @@ class VeltoDashboard extends HTMLElement {
     backdrop.addEventListener('click',e=>{if(e.target===backdrop)close()});
     document.addEventListener('keydown',escape);
     const header=make('div','velto-modal-head'),heading=make('div','velto-modal-heading'),x=make('button','velto-modal-close','×');
-    const dialogTitle=make('h2','',this.name(id));dialogTitle.id='velto-detail-title';heading.append(make('small','',domain.replace('_',' ').toUpperCase()),dialogTitle);x.type='button';x.setAttribute('aria-label','Zamknij');x.addEventListener('click',close);header.append(heading,x);panel.append(header);
+    const dialogTitle=make('h2','',this.name(id));dialogTitle.id='velto-detail-title';heading.append(make('small','',domain==='remote'?'PILOT':domain==='event'?'ZDARZENIE':domain.replace('_',' ').toUpperCase()),dialogTitle);x.type='button';x.setAttribute('aria-label','Zamknij');x.addEventListener('click',close);header.append(heading,x);panel.append(header);
     const status=make('p','velto-modal-status',domain==='input_text'?(state.attributes?.mode==='password'?'Wartość chroniona':'Wartość tekstowa'):this.entityStateLabel(id,state));status.id='velto-detail-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');panel.append(status);
     const attrs=state.attributes||{};
     const controls=make('div','velto-modal-controls');
@@ -1369,6 +1376,54 @@ class VeltoDashboard extends HTMLElement {
       panel.append(make('p','velto-modal-warning','Ze względów bezpieczeństwa VELTO nie uzbraja ani nie rozbraja alarmu i nie przechowuje kodów. Wymagane kody i dodatkowe potwierdzenia obsługuje Home Assistant.'));
       const native=make('button','velto-modal-control','Otwórz sterowanie Home Assistant');
       native.type='button';native.setAttribute('aria-label','Otwórz natywne sterowanie alarmem w Home Assistant');
+      native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
+      controls.append(native)
+    }else if(domain==='event'){
+      const eventType=typeof attrs.event_type==='string'?attrs.event_type.trim().slice(0,80):'';
+      const eventTypeLabels={ring:'Dzwonek',single_press:'Pojedyncze naciśnięcie',double_press:'Podwójne naciśnięcie',press_start:'Rozpoczęto naciśnięcie',press_end:'Zakończono naciśnięcie',long_press_start:'Rozpoczęto długie naciśnięcie',long_press_end:'Zakończono długie naciśnięcie',multi_press_ongoing:'Trwa seria naciśnięć',multi_press_end:'Zakończono serię naciśnięć'};
+      const eventTypeLabel=eventType?(eventTypeLabels[eventType.toLowerCase()]||eventType):'';
+      const eventDate=typeof state.state==='string'?new Date(state.state):null;
+      const hasEvent=Boolean(eventDate&&Number.isFinite(eventDate.getTime())&&!['unknown','unavailable'].includes(state.state));
+      const deviceClass=typeof attrs.device_class==='string'?attrs.device_class.toLowerCase():'';
+      const eventKind=deviceClass==='doorbell'?'Dzwonek':deviceClass==='button'?'Przycisk':deviceClass==='motion'?'Ruch':'Zdarzenie';
+      const hero=make('div','velto-counter-hero'),value=make('strong','velto-counter-value',hasEvent?'Zdarzenie zarejestrowane':'Brak zarejestrowanego zdarzenia');
+      hero.append(value,make('small','velto-counter-meta',eventKind+' Home Assistant'));
+      hero.setAttribute('role','status');hero.setAttribute('aria-live','polite');panel.append(hero);
+      if(eventTypeLabel)panel.append(make('p','velto-modal-meta','Ostatni typ zdarzenia · '+eventTypeLabel));
+      if(hasEvent)panel.append(make('p','velto-modal-meta','Ostatnie zdarzenie · '+eventDate.toLocaleString('pl-PL')));
+      const rawCount=attrs.press_count??attrs.multi_press_count,count=rawCount===null||rawCount===undefined||String(rawCount).trim()===''?NaN:Number(rawCount);
+      if(Number.isSafeInteger(count)&&count>=1&&count<=100)panel.append(make('p','velto-modal-meta','Liczba naciśnięć · '+count));
+      const rawTypes=Array.isArray(attrs.event_types)?attrs.event_types.slice(0,32):[];
+      const eventTypes=Array.from(new Set(rawTypes.filter(item=>typeof item==='string').map(item=>item.trim()).filter(Boolean)));
+      if(eventTypes.length){
+        panel.append(make('p','velto-modal-meta','Obsługiwane typy zdarzeń'));
+        for(const type of eventTypes.slice(0,8))panel.append(make('p','velto-modal-meta velto-event-type','• '+(eventTypeLabels[type.toLowerCase()]||type.slice(0,80))));
+        if(eventTypes.length>8)panel.append(make('p','velto-modal-meta','Pokazano 8 z '+eventTypes.length+' typów zdarzeń.'));
+        if(Array.isArray(attrs.event_types)&&attrs.event_types.length>32)panel.append(make('p','velto-modal-meta','Lista typów została ograniczona do 32 wpisów.'));
+      }else panel.append(make('p','velto-modal-meta','Integracja nie udostępnia listy typów zdarzeń.'));
+      panel.append(make('p','velto-modal-warning','VELTO wyświetla wyłącznie ostatnie zdarzenie. Reagowanie na zdarzenia i konfiguracja automatyzacji pozostają w Home Assistant.'));
+      const native=make('button','velto-modal-control','Otwórz szczegóły w Home Assistant');
+      native.type='button';native.setAttribute('aria-label','Otwórz natywne szczegóły zdarzenia w Home Assistant');
+      native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
+      controls.append(native)
+    }else if(domain==='remote'){
+      const remoteState=state.state==='on'?'Włączony':state.state==='off'?'Wyłączony':this.entityStateLabel(id,state);
+      const hero=make('div','velto-counter-hero'),value=make('strong','velto-counter-value',remoteState);
+      hero.append(value,make('small','velto-counter-meta','Pilot Home Assistant'));
+      hero.setAttribute('role','status');hero.setAttribute('aria-live','polite');panel.append(hero);
+      const currentActivity=typeof attrs.current_activity==='string'?attrs.current_activity.trim().slice(0,120):'';
+      if(currentActivity&&!['unknown','unavailable','none'].includes(currentActivity.toLowerCase()))panel.append(make('p','velto-modal-meta','Bieżąca aktywność · '+currentActivity));
+      const rawActivities=Array.isArray(attrs.activity_list)?attrs.activity_list.slice(0,40):[];
+      const activities=Array.from(new Set(rawActivities.filter(item=>typeof item==='string').map(item=>item.trim()).filter(Boolean)));
+      if(activities.length){
+        panel.append(make('p','velto-modal-meta','Dostępne aktywności'));
+        for(const activity of activities.slice(0,8))panel.append(make('p','velto-modal-meta velto-remote-activity','• '+activity.slice(0,120)));
+        if(activities.length>8)panel.append(make('p','velto-modal-meta','Pokazano 8 z '+activities.length+' aktywności.'));
+        if(Array.isArray(attrs.activity_list)&&attrs.activity_list.length>40)panel.append(make('p','velto-modal-meta','Lista została ograniczona do pierwszych 40 wpisów.'));
+      }else panel.append(make('p','velto-modal-meta','Integracja nie udostępnia listy aktywności.'));
+      panel.append(make('p','velto-modal-warning','VELTO pokazuje wyłącznie informacje z integracji. Komendy pilota i wybór aktywności pozostają w Home Assistant.'));
+      const native=make('button','velto-modal-control','Otwórz sterowanie Home Assistant');
+      native.type='button';native.setAttribute('aria-label','Otwórz natywne sterowanie pilotem w Home Assistant');
       native.addEventListener('click',()=>{close();this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:id},bubbles:true,composed:true}))});
       controls.append(native)
     }else if(domain==='update'){
@@ -2463,7 +2518,7 @@ class VeltoDashboard extends HTMLElement {
     if(cls==='temperature')return 'climate';
     if(cls==='humidity'||cls==='pressure')return 'weather';
     if(cls==='power'||cls==='energy'||cls==='current'||cls==='voltage')return 'plug';
-    return ({light:'light',switch:'switch',fan:'fan',cover:'cover',lock:'lock',climate:'climate',sensor:'sensor',binary_sensor:'binary_sensor',scene:'scene',camera:'camera',input_boolean:'input_boolean',media_player:'media_player',vacuum:'vacuum',script:'script',button:'button',input_button:'button',automation:'automation',humidifier:'humidifier',water_heater:'water_heater',valve:'valve',alarm_control_panel:'alarm_control_panel',remote:'remote',number:'number',input_number:'number',select:'select',input_select:'select',input_datetime:'calendar',input_text:'input_text',counter:'hash',timer:'timer',weather:'weather',sun:'sun'})[domain]||'generic'
+    return ({light:'light',switch:'switch',fan:'fan',cover:'cover',lock:'lock',climate:'climate',sensor:'sensor',binary_sensor:'binary_sensor',scene:'scene',camera:'camera',input_boolean:'input_boolean',media_player:'media_player',vacuum:'vacuum',script:'script',button:'button',input_button:'button',event:'button',automation:'automation',humidifier:'humidifier',water_heater:'water_heater',valve:'valve',alarm_control_panel:'alarm_control_panel',remote:'remote',number:'number',input_number:'number',select:'select',input_select:'select',input_datetime:'calendar',input_text:'input_text',counter:'hash',timer:'timer',weather:'weather',sun:'sun'})[domain]||'generic'
   }
   captureScrollState(root=this.shadowRoot){
     const ancestors=[];
@@ -2585,7 +2640,7 @@ class VeltoDashboard extends HTMLElement {
 .tile[data-domain=fan].on .glyph svg{animation:velto-spin 2.4s linear infinite}.tile[data-domain=vacuum].vacuum-moving .glyph{animation:velto-bob 1.4s ease-in-out infinite}.tile[data-domain=climate].on .glyph{animation:velto-pulse 2s ease-in-out infinite}.tile[data-domain=cover].moving .glyph svg{animation:velto-cover-move 1.35s ease-in-out infinite}.tile[data-domain=valve].valve-moving .glyph svg{animation:velto-cover-move 1.35s ease-in-out infinite}.tile[data-domain=light].on .glyph{animation:velto-light 3s ease-in-out infinite}.tile.motion-active .glyph svg{animation:velto-pulse 1.9s ease-in-out infinite}.tile.entry-open .glyph svg{animation:velto-door-ajar 2.8s ease-in-out infinite;transform-origin:28% 50%}.tile.water-alert .glyph{color:#287f9c;background:#dceff6;filter:drop-shadow(0 0 5px #4aa9ca55)}.dark .tile.water-alert .glyph{color:#91d9f0;background:#193c49;filter:drop-shadow(0 0 5px #4aa9ca55)}.tile.hazard-alert .glyph,.tile[data-domain=alarm_control_panel].alarm-triggered .glyph{color:#b3443b;background:#f9dfdc;filter:drop-shadow(0 0 5px #d85a4c55)}.dark .tile.hazard-alert .glyph,.dark .tile[data-domain=alarm_control_panel].alarm-triggered .glyph{color:#ffaaa0;background:#542b2e;filter:drop-shadow(0 0 5px #d85a4c55)}.tile.water-alert .glyph svg,.tile.hazard-alert .glyph svg,.tile[data-domain=alarm_control_panel].alarm-triggered .glyph svg{animation:velto-alert 1.7s ease-in-out infinite}:host([data-velto-visibility-managed]) .tile:not([data-velto-visible]) .glyph,:host([data-velto-visibility-managed]) .tile:not([data-velto-visible]) .glyph svg{animation-play-state:paused!important}@keyframes velto-spin{to{transform:rotate(360deg)}}@keyframes velto-bob{0%,100%{transform:translateX(-2px)}50%{transform:translateX(2px)}}@keyframes velto-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.65;transform:scale(1.08)}}@keyframes velto-rise{0%,100%{transform:translateY(1px)}50%{transform:translateY(-2px)}}@keyframes velto-light{0%,100%{box-shadow:0 0 0 0 #e9b45a00}50%{box-shadow:0 0 0 5px #e9b45a26}}@keyframes velto-cover-move{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}@keyframes velto-door-ajar{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-3deg)}}@keyframes velto-alert{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.82;transform:scale(1.07)}}
 .media-progress{width:100%;height:5px;background:#b9b0a180;border-radius:99px;overflow:hidden;margin-top:4px}.media-progress-fill{display:block;height:100%;background:#e99524;border-radius:99px}.media-times{display:flex;justify-content:space-between;gap:8px;color:#81776b;font-size:10px}.dark .media-progress{background:#5a5248}.dark .media-progress-fill{background:#e2b36b}.media-title{font-size:12px;font-weight:750;overflow-wrap:anywhere}.media-app,.media-volume{font-size:11px;color:#81776b}.tile-controls{display:flex;gap:6px;margin-top:10px;position:relative;z-index:2}.tile-controls button{border:1px solid #d4c5af;background:#fff9;color:#75552d;border-radius:10px;min-width:34px;min-height:32px;padding:6px 9px;font:700 12px inherit;cursor:pointer}.tile-controls button:disabled{opacity:.35;cursor:default}.tile-controls button{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation}.tile-controls button:focus-visible{outline:2px solid #b77c32;outline-offset:3px}.tile-controls button[aria-busy=true]{opacity:.55;cursor:progress}.tile-controls button svg{width:18px;height:18px;display:block;fill:currentColor}.tile[data-domain=media_player] .glyph svg{fill:currentColor}.tile[data-domain=media_player] .glyph.media-playing svg{animation:velto-media-breathe 2.6s ease-in-out infinite;transform-origin:center}@keyframes velto-media-breathe{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.78}}@media(prefers-reduced-motion:reduce){.tile,.tile .glyph,.tile .glyph svg{animation:none!important;transition:none!important}.tile:hover,.tile:active{transform:none!important}}.dark .tile-controls button{background:#3b4149;color:#efc784;border-color:#626a73}.device-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px;font-size:10px;color:#84796d}.device-meta span{background:#ffffff70;padding:4px 7px;border-radius:8px}.dark .device-meta span{background:#ffffff10;color:#c9c1b6}
 .camera-tile-art{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:13px;margin-top:10px;background:#292724}.camera-tile-art[hidden]{display:none}.dark .camera-tile-art{background:#171a1e}
-.media-art{width:100%;max-height:110px;object-fit:cover;border-radius:12px}.tile b{display:block;font-size:13px;overflow-wrap:break-word;word-break:normal;hyphens:auto;line-height:1.35}.tile small{display:block;font-size:11px;color:#81776b;margin-top:5px;overflow-wrap:break-word;word-break:normal}.tile-wrap{min-width:0;display:flex;flex-direction:column;gap:7px}.brightness{width:100%;appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:pan-x;height:10px;margin:9px 0;border:1px solid #d5c5a8;border-radius:999px;background:linear-gradient(to right,#e99524 0%,#e99524 var(--brightness,0%),#d9d2c6 var(--brightness,0%),#d9d2c6 100%)}.brightness::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.brightness::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.dark .brightness{border-color:#6a5a46;background:linear-gradient(to right,#e3b66d 0%,#e3b66d var(--brightness,0%),#4b4b4b var(--brightness,0%),#4b4b4b 100%)}.dark .brightness::-webkit-slider-thumb,.dark .brightness::-moz-range-thumb{background:#e3b66d}.brightness:focus-visible{outline:2px solid #e99524;outline-offset:3px}.brightness-label{font-size:10px;color:#846b49}.tile:has(.brightness){min-height:160px}
+.media-art{width:100%;max-height:110px;object-fit:cover;border-radius:12px}.tile b{display:block;font-size:13px;overflow-wrap:break-word;word-break:normal;hyphens:auto;line-height:1.35}.tile small{display:block;font-size:11px;color:#81776b;margin-top:5px;overflow-wrap:break-word;word-break:normal}.tile-wrap{min-width:0;display:flex;flex-direction:column;gap:7px}.brightness{width:100%;appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:pan-x;height:10px;margin:9px 0;border:1px solid #d5c5a8;border-radius:999px;background:linear-gradient(to right,#e99524 0%,#e99524 var(--brightness,0%),#d9d2c6 var(--brightness,0%),#d9d2c6 100%)}.brightness::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.brightness::-moz-range-thumb{width:16px;height:16px;border-radius:50%;border:3px solid #fff9;background:#e99524;box-shadow:0 2px 6px #0003}.dark .brightness{border-color:#6a5a46;background:linear-gradient(to right,#e3b66d 0%,#e3b66d var(--brightness,0%),#4b4b4b var(--brightness,0%),#4b4b4b 100%)}.dark .brightness::-webkit-slider-thumb,.dark .brightness::-moz-range-thumb{background:#e3b66d}.brightness:focus-visible{outline:2px solid #e99524;outline-offset:3px}.brightness-label{font-size:10px;color:#846b49}.tile-has-brightness{min-height:160px}
 .weather{display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:16px;padding:19px;border-radius:24px;background:linear-gradient(145deg,#f9f6f0,#e8e3da);box-shadow:inset 2px 2px 6px #c8c0b5,inset -2px -2px 8px #fff}
 .weather .temperature{font-size:38px;font-weight:800;letter-spacing:-.06em;margin:8px 0}
 .weather-lead{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:0}.weather-lead .weather-clock{display:inline-flex;align-items:center;justify-content:center;margin-top:8px;padding:8px 12px;border:1px solid #ffffffa8;border-radius:13px;background:#eee9e0a8;box-shadow:inset 1px 1px 3px #c9c1b5,inset -1px -1px 3px #fff8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;font-size:clamp(23px,2vw,29px);font-weight:500;letter-spacing:-.055em;line-height:1.05;color:#71695f;font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'ss01' 1;white-space:nowrap}.dark .weather-lead .weather-clock{background:#252c34;border-color:#48515b;color:#f0e5d5;box-shadow:inset 1px 1px 3px #151a20,inset -1px -1px 3px #48515b}
@@ -3036,6 +3091,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
         if(missing){const status=el('span','tile-status tile-status-offline','Brak połączenia');status.setAttribute('aria-hidden','true');desc.append(status)}
         else if(on&&['light','switch','fan','input_boolean','cover','media_player','vacuum','humidifier'].includes(domain)){const status=el('span','tile-status tile-status-on',domain==='cover'?'Otwarta':domain==='media_player'?'Odtwarzanie':domain==='vacuum'?'Pracuje':'Aktywne');status.setAttribute('aria-hidden','true');desc.append(status)}
         if(domain==='light'&&!missing&&((Array.isArray(s.attributes?.supported_color_modes)&&s.attributes.supported_color_modes.some(mode=>mode!=='onoff'&&mode!=='unknown'))||s.attributes?.supported_features&1)){
+          tile.classList.add('tile-has-brightness');
           const brightness=Number(s.attributes?.brightness),pct=Number.isFinite(brightness)?Math.round(Math.max(0,Math.min(255,brightness))/255*100):0,slider=document.createElement('input'),brightnessValue=el('span','brightness-label');
           slider.type='range';slider.className='brightness';slider.min='0';slider.max='100';slider.value=String(on?Math.max(1,pct):0);slider.disabled=!on;slider.setAttribute('aria-label','Jasność '+(t.name||this.name(t.entity)));
           const updateBrightness=()=>{brightnessValue.textContent=on?'Jasność · '+slider.value+'%':'Jasność · wyłączone';slider.style.setProperty('--brightness',on?slider.value+'%':'0%')};
@@ -3218,7 +3274,7 @@ if(!window.customCards.some(c=>c.type==='velto-dashboard'))window.customCards.pu
 
 /* Visual configuration editor: rooms, entities, presence. Weather YAML remains supported. */
 class VeltoDashboardEditor extends HTMLElement {
-  constructor(){super();this.attachShadow({mode:'open'});this._historyShortcutListener=event=>this.handleEditorHistoryShortcut(event);this.shadowRoot.addEventListener('keydown',this._historyShortcutListener);this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._visibilityListener=null;this._pickerSignature=null;this._pickerSequence=0;this._undoStack=[];this._redoStack=[];this._historyLimit=20;this._configSignature=null;this._previewDashboard=null;this._previewSignature=null;this._previewOpenEntities=new Set();this._entityPickerOptionsSignature=null;this._entityPickerOptionsCache=null;this._pendingRoomEntityPickerRoom=null;this._pendingRoomEntityIds=new Set();this._selectedRoomEntityIds=new Set();this._roomAppearanceNotice='';this._pendingRoomEntityQuery='';this._pendingRoomEntityDomain='';this._pendingRoomEntityPickerOpen=false;this._configBackupNotice='';this._pendingConfigImport=null;this._configBackupRequest=0;this._editorLiveRegion=null}
+  constructor(){super();this.attachShadow({mode:'open'});this._historyShortcutListener=event=>this.handleEditorHistoryShortcut(event);this.shadowRoot.addEventListener('keydown',this._historyShortcutListener);this._config={rooms:[]};this._hass=null;this._selectedRoom=0;this._advanced=false;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryRequest=0;this._setupRegistryError=null;this._renderFrame=null;this._cancelRenderFrame=null;this._renderPending=false;this._visibilityListener=null;this._pickerSignature=null;this._pickerSignatureCache=new WeakMap();this._editorSelectorSignature=null;this._editorSelectorSignatureCache=new WeakMap();this._pickerSequence=0;this._undoStack=[];this._redoStack=[];this._historyLimit=20;this._configSignature=null;this._previewDashboard=null;this._previewSignature=null;this._previewOpenEntities=new Set();this._entityPickerOptionsSignature=null;this._entityPickerOptionsCache=null;this._pendingRoomEntityPickerRoom=null;this._pendingRoomEntityIds=new Set();this._selectedRoomEntityIds=new Set();this._roomAppearanceNotice='';this._pendingRoomEntityQuery='';this._pendingRoomEntityDomain='';this._pendingRoomEntityPickerOpen=false;this._configBackupNotice='';this._pendingConfigImport=null;this._configBackupRequest=0;this._editorLiveRegion=null}
   editorConfigSignature(config){try{return JSON.stringify(config??{})}catch{return null}}
   cloneEditorConfig(config){const signature=this.editorConfigSignature(config);return signature===null?null:JSON.parse(signature)}
   createConfigBackup(){
@@ -3488,10 +3544,16 @@ class VeltoDashboardEditor extends HTMLElement {
   }
   editorEntityPickerOptions(){
     const signature=this._pickerSignature??this.editorPickerSignature(this._hass);
+    this._pickerSignature=signature;
     if(this._entityPickerOptionsCache&&this._entityPickerOptionsSignature===signature)return this._entityPickerOptionsCache;
-    const states=this._hass?.states||{},options=Object.keys(states).sort().map(id=>{
+    const collator=this._entityPickerCollator??(this._entityPickerCollator=typeof Intl!=='undefined'&&typeof Intl.Collator==='function'?new Intl.Collator('pl',{numeric:true,sensitivity:'base'}):null);
+    const states=this._hass?.states||{},options=Object.keys(states).map(id=>{
       const label=String(states[id]?.attributes?.friendly_name||id),domain=id.includes('.')?id.slice(0,id.indexOf('.')):'';
       return {value:id,label,domain,search:this.normalizeEditorSearchText(label+' '+id)}
+    });
+    options.sort((a,b)=>{
+      const labels=collator?collator.compare(a.label,b.label):a.label.localeCompare(b.label);
+      return labels||a.value.localeCompare(b.value)
     });
     this._entityPickerOptionsSignature=signature;this._entityPickerOptionsCache=options;return options
   }
@@ -3508,21 +3570,53 @@ class VeltoDashboardEditor extends HTMLElement {
     return {visible,count,truncated:count>max,selectedCount}
   }
   editorPickerSignature(hass){
-    const states=hass?.states||{},parts=[];
-    for(const id of Object.keys(states)){
-      const state=states[id]||{},attrs=state.attributes||{};
-      parts.push(id,typeof attrs.friendly_name==='string'?attrs.friendly_name:'',id.startsWith('weather.')&&!['unknown','unavailable'].includes(state.state)?'available':'');
+    const states=hass?.states;
+    if(states&&typeof states==='object'){
+      const cached=this._pickerSignatureCache?.get(states);
+      if(typeof cached==='string')return cached
     }
-    return JSON.stringify(parts)
+    // Home Assistant publishes immutable state snapshots. Cache by snapshot identity
+    // so unrelated hass updates do not rescan a large entity registry.
+    const snapshot=states&&typeof states==='object'?states:{},parts=[];
+    for(const id of Object.keys(snapshot)){
+      const state=snapshot[id]||{},attrs=state.attributes||{};
+      parts.push(id,String(attrs.friendly_name||id),id.startsWith('weather.')&&!['unknown','unavailable'].includes(state.state)?'available':'');
+    }
+    const signature=JSON.stringify(parts);
+    if(states&&typeof states==='object')this._pickerSignatureCache?.set(states,signature);
+    return signature
+  }
+  editorSelectorSignature(hass){
+    const states=hass?.states;
+    if(states&&typeof states==='object'){
+      const cached=this._editorSelectorSignatureCache?.get(states);
+      if(typeof cached==='string')return cached
+    }
+    const snapshot=states&&typeof states==='object'?states:{},parts=[];
+    for(const id of Object.keys(snapshot)){
+      const separator=id.indexOf('.'),domain=separator>0?id.slice(0,separator):'';
+      if(domain!=='calendar'&&domain!=='person'&&domain!=='device_tracker'&&domain!=='sensor'&&domain!=='weather')continue;
+      const state=snapshot[id]||{},attrs=state.attributes||{};
+      const label=String(attrs.friendly_name||id);
+      const availability=domain==='weather'&&!['unknown','unavailable'].includes(state.state)?'available':'';
+      parts.push(id,label,availability)
+    }
+    const signature=JSON.stringify(parts);
+    if(states&&typeof states==='object')this._editorSelectorSignatureCache?.set(states,signature);
+    return signature
   }
   set hass(h){
-    const pickerSignature=this.editorPickerSignature(h),pickerOptionsChanged=this._pickerSignature!==pickerSignature;
+    const pickerOpen=this._pendingRoomEntityPickerOpen===true;
+    const pickerSignature=pickerOpen?this.editorPickerSignature(h):null;
+    const pickerOptionsChanged=pickerOpen&&this._pickerSignature!==pickerSignature;
+    const selectorSignature=this._advanced&&!pickerOpen?this.editorSelectorSignature(h):null;
+    const selectorOptionsChanged=this._advanced&&!pickerOpen&&this._editorSelectorSignature!==selectorSignature;
     const previewSignature=this.editorPreviewSignature(h),previewChanged=this._previewSignature!==previewSignature;
     const previousConnection=this._hass?.connection;
-    this._hass=h;this._pickerSignature=pickerSignature;this._previewSignature=previewSignature;
+    this._hass=h;this._pickerSignature=pickerOpen?pickerSignature:null;this._editorSelectorSignature=this._advanced&&!pickerOpen?selectorSignature:null;this._previewSignature=previewSignature;
     if(previousConnection!==h?.connection){this._setupRegistryRequest++;this._setupRegistry=null;this._setupRegistryConnection=null;this._setupRegistryLoading=false;this._setupRegistryLoadingConnection=null;this._setupRegistryError=null}
     if(this.isConnected!==false)this.loadSetupRegistry();
-    if(!this.shadowRoot?.children.length||pickerOptionsChanged||previewChanged)this.scheduleRender()
+    if(!this.shadowRoot?.children.length||pickerOptionsChanged||selectorOptionsChanged||previewChanged)this.scheduleRender()
   }
   async loadSetupRegistry(force=false){
     const connection=this._hass?.connection;
@@ -3793,7 +3887,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .room{border:1px solid var(--divider-color,#ddd);border-radius:15px;padding:12px;display:grid;gap:12px}.search-picker{display:grid;gap:6px;min-width:0}.search-picker input{min-height:40px}.search-picker-status{display:block;min-height:1em;font-size:11px;line-height:1.35;opacity:.68}.row{display:grid;grid-template-columns:minmax(0,1fr) 90px 42px;gap:7px;align-items:center}.row small{display:block;font-size:11px;opacity:.65;overflow-wrap:anywhere}
 .muted{font-size:12px;opacity:.7}.section{font-weight:750;margin:5px 0 0}
 .setup{padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:18px;background:var(--card-background-color,#fff);display:grid;gap:13px}.setup h3{margin:0;font-size:19px}.setup p{margin:0;line-height:1.45}.setup-ok{font-size:12px;font-weight:700;color:var(--success-color,#4b8b54)}.advanced-toggle{background:transparent}
-.discovery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.discovery div{padding:10px;border-radius:12px;background:var(--secondary-background-color,#f5f5f5);background:color-mix(in srgb,var(--card-background-color,#fff) 80%,var(--primary-color,#c18c43) 8%);text-align:center}.discovery b{display:block;font-size:18px}.discovery small{font-size:10px;opacity:.7}.setup-status{font-size:12px;padding:9px 10px;border-radius:10px;background:var(--secondary-background-color,#f5f5f5)}@media(max-width:520px){.discovery{grid-template-columns:repeat(2,minmax(0,1fr))}}.editor-history{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--divider-color,#ddd);border-radius:13px;background:var(--secondary-background-color,#f5f5f5)}.editor-history button{min-width:104px}.editor-history button:disabled{opacity:.42;cursor:not-allowed}.editor-history small{flex:1 1 180px;font-size:11px;line-height:1.4;opacity:.68}.editor-diagnostics{display:grid;gap:7px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--warning-color,#c58a35) 45%,var(--divider-color,#ddd));border-radius:14px;background:color-mix(in srgb,var(--warning-color,#c58a35) 9%,var(--card-background-color,#fff))}.editor-diagnostics-head{font-size:12px;font-weight:800;color:var(--primary-text-color,#333)}.editor-diagnostics-list{display:grid;gap:6px}.editor-diagnostic{margin:0;padding-left:17px;position:relative;font-size:12px;line-height:1.45;overflow-wrap:anywhere}.editor-diagnostic:before{content:'!';position:absolute;left:0;top:0;font-weight:900;color:var(--warning-color,#b7791f)}.editor-diagnostics-more{font-size:11px;opacity:.7}.room-selector-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.room-order,.room-device-order{display:flex;align-items:center;justify-content:flex-end;gap:6px}.room-order button,.room-device-order button{display:grid;place-items:center;min-width:44px;min-height:44px;padding:8px;font-weight:800}.room-order button:disabled,.room-device-order button:disabled{opacity:.35;cursor:not-allowed}.room-device-row{grid-template-columns:44px minmax(0,1fr) auto;align-items:start}.room-device-row>div:nth-child(2){grid-column:2/-1;min-width:0}.room-device-row>select{grid-column:2;width:auto;min-width:100px}.room-device-row>.room-device-order{grid-column:1/-1}.room-device-select-wrap{display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer}.room-device-select{width:22px;min-width:22px;min-height:22px;padding:0;accent-color:var(--primary-color,#c18c43)}.room-device-select:focus-visible,.room-device-bulk-fields input:focus-visible{outline:2px solid var(--primary-color,#c18c43);outline-offset:2px}.room-device-order{flex-wrap:wrap}.room-device-bulk-appearance{display:grid;gap:8px;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--secondary-background-color,#f5f5f5)}.room-device-bulk-appearance[hidden]{display:none}.room-device-bulk-status{font-size:11px;line-height:1.4;opacity:.72}.room-device-bulk-fields{display:flex;gap:10px;flex-wrap:wrap}.room-device-bulk-fields label{display:flex;align-items:center;gap:6px;min-height:44px;font-size:12px}.room-device-bulk-fields input{width:20px;min-width:20px;min-height:20px;padding:0;accent-color:var(--primary-color,#c18c43)}.room-device-selection-actions{display:flex;gap:8px;flex-wrap:wrap}.room-device-selection-actions button{min-height:44px}.room-device-selection-actions[hidden]{display:none}.room-device-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.room-device-options .field{min-width:0}.room-device-options input,.room-device-options select{min-width:0}@media(max-width:520px){.room-device-options{grid-template-columns:minmax(0,1fr)}}@media(max-width:420px){.room-selector-row{grid-template-columns:minmax(0,1fr)}.room-order{justify-content:flex-end}}
+.discovery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.discovery div{padding:10px;border-radius:12px;background:var(--secondary-background-color,#f5f5f5);background:color-mix(in srgb,var(--card-background-color,#fff) 80%,var(--primary-color,#c18c43) 8%);text-align:center}.discovery b{display:block;font-size:18px}.discovery small{font-size:10px;opacity:.7}.setup-status{font-size:12px;padding:9px 10px;border-radius:10px;background:var(--secondary-background-color,#f5f5f5)}@media(max-width:520px){.discovery{grid-template-columns:repeat(2,minmax(0,1fr))}}.editor-history{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--divider-color,#ddd);border-radius:13px;background:var(--secondary-background-color,#f5f5f5)}.editor-history button{min-width:104px}.editor-history button:disabled{opacity:.42;cursor:not-allowed}.editor-history small{flex:1 1 180px;font-size:11px;line-height:1.4;opacity:.68}.editor-diagnostics{display:grid;gap:7px;padding:12px 14px;border:1px solid var(--warning-color,#c58a35);border-radius:14px;background:var(--secondary-background-color,#f5f5f5);border-color:color-mix(in srgb,var(--warning-color,#c58a35) 45%,var(--divider-color,#ddd));background:color-mix(in srgb,var(--warning-color,#c58a35) 9%,var(--card-background-color,#fff))}.editor-diagnostics-head{font-size:12px;font-weight:800;color:var(--primary-text-color,#333)}.editor-diagnostics-list{display:grid;gap:6px}.editor-diagnostic{margin:0;padding-left:17px;position:relative;font-size:12px;line-height:1.45;overflow-wrap:anywhere}.editor-diagnostic:before{content:'!';position:absolute;left:0;top:0;font-weight:900;color:var(--warning-color,#b7791f)}.editor-diagnostics-more{font-size:11px;opacity:.7}.room-selector-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}.room-order,.room-device-order{display:flex;align-items:center;justify-content:flex-end;gap:6px}.room-order button,.room-device-order button{display:grid;place-items:center;min-width:44px;min-height:44px;padding:8px;font-weight:800}.room-order button:disabled,.room-device-order button:disabled{opacity:.35;cursor:not-allowed}.room-device-row{grid-template-columns:44px minmax(0,1fr) auto;align-items:start}.room-device-row>div:nth-child(2){grid-column:2/-1;min-width:0}.room-device-row>select{grid-column:2;width:auto;min-width:100px}.room-device-row>.room-device-order{grid-column:1/-1}.room-device-select-wrap{display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer}.room-device-select{width:22px;min-width:22px;min-height:22px;padding:0;accent-color:var(--primary-color,#c18c43)}.room-device-select:focus-visible,.room-device-bulk-fields input:focus-visible{outline:2px solid var(--primary-color,#c18c43);outline-offset:2px}.room-device-order{flex-wrap:wrap}.room-device-bulk-appearance{display:grid;gap:8px;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--secondary-background-color,#f5f5f5)}.room-device-bulk-appearance[hidden]{display:none}.room-device-bulk-status{font-size:11px;line-height:1.4;opacity:.72}.room-device-bulk-fields{display:flex;gap:10px;flex-wrap:wrap}.room-device-bulk-fields label{display:flex;align-items:center;gap:6px;min-height:44px;font-size:12px}.room-device-bulk-fields input{width:20px;min-width:20px;min-height:20px;padding:0;accent-color:var(--primary-color,#c18c43)}.room-device-selection-actions{display:flex;gap:8px;flex-wrap:wrap}.room-device-selection-actions button{min-height:44px}.room-device-selection-actions[hidden]{display:none}.room-device-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.room-device-options .field{min-width:0}.room-device-options input,.room-device-options select{min-width:0}@media(max-width:520px){.room-device-options{grid-template-columns:minmax(0,1fr)}}@media(max-width:420px){.room-selector-row{grid-template-columns:minmax(0,1fr)}.room-order{justify-content:flex-end}}
 .room-entity-bulk{display:grid;gap:9px;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:14px;background:var(--secondary-background-color,#f5f5f5)}.room-entity-bulk>summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-size:13px;font-weight:750;list-style:none}.room-entity-bulk>summary::-webkit-details-marker{display:none}.room-entity-bulk>summary:focus-visible{outline:2px solid var(--primary-color,#c18c43);outline-offset:3px}.room-entity-bulk-body{display:grid;gap:8px;min-width:0}.room-entity-search{width:100%;min-height:44px}.room-entity-results{display:grid;gap:5px;max-height:280px;overflow:auto;overscroll-behavior:contain;padding:2px}.room-entity-choice{display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 9px;border:1px solid var(--divider-color,#ddd);border-radius:10px;background:var(--card-background-color,#fff);cursor:pointer}.room-entity-choice input{width:22px;min-width:22px;min-height:22px;accent-color:var(--primary-color,#c18c43)}.room-entity-choice-copy{display:grid;gap:2px;min-width:0}.room-entity-choice-copy strong{font-size:12px;overflow-wrap:anywhere}.room-entity-choice-copy small{font-size:10px;opacity:.65;overflow-wrap:anywhere}.room-entity-count,.room-entity-empty{font-size:11px;line-height:1.4;opacity:.72}.room-entity-bulk-actions{display:flex;gap:7px;flex-wrap:wrap}.room-entity-bulk-actions button{flex:1 1 140px}.room-entity-bulk-actions button:disabled{opacity:.42;cursor:not-allowed}
 .tile-preview-details{border-top:1px solid var(--divider-color,#ddd);padding-top:3px}.tile-preview-details summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-size:12px;font-weight:750;color:var(--secondary-text-color,var(--primary-text-color,#555))}.tile-preview-card{display:flex;align-items:center;gap:11px;min-height:68px;padding:11px 12px;border:1px solid var(--divider-color,#ddd);border-radius:15px;background:var(--card-background-color,#fff);box-shadow:4px 4px 10px rgba(0,0,0,.07),-3px -3px 10px rgba(255,255,255,.42);transition:background .18s,border-color .18s,box-shadow .18s}.tile-preview-card[data-size=medium]{min-height:78px}.tile-preview-card[data-size=large]{min-height:88px}.tile-preview-card.is-active{border-color:var(--warning-color,#d69a3c);background:var(--card-background-color,#fff);background:color-mix(in srgb,var(--warning-color,#d69a3c) 7%,var(--card-background-color,#fff))}.tile-preview-card.is-missing{opacity:.58}.tile-preview-glyph{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:var(--secondary-background-color,#f4f1ea);color:var(--secondary-text-color,#716653)}.tile-preview-card.is-active .tile-preview-glyph{color:var(--warning-color,#d69a3c)}.tile-preview-card.is-playing .tile-preview-glyph{animation:velto-preview-pulse 1.8s ease-in-out infinite}.tile-preview-glyph svg{display:block;width:24px;height:24px}.tile-preview-glyph ha-icon{--mdc-icon-size:24px;width:24px;height:24px}.tile-preview-copy{display:grid;gap:3px;min-width:0;flex:1}.tile-preview-copy strong{font-size:13px;overflow-wrap:anywhere}.tile-preview-copy small{font-size:11px;opacity:.72;overflow-wrap:anywhere}.tile-preview-copy .tile-preview-entity{font-size:10px;opacity:.55}.tile-preview-size{flex:0 0 auto;padding:5px 8px;border-radius:9px;background:var(--secondary-background-color,#f4f1ea);font-size:10px;font-weight:750}@keyframes velto-preview-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:.82}}@media(prefers-reduced-motion:reduce){.tile-preview-card,.tile-preview-glyph{transition:none;animation:none!important}}
 .editor-backup{display:grid;gap:9px;padding:12px;border:1px solid var(--divider-color,#ddd);border-radius:15px;background:var(--secondary-background-color,#f5f5f5)}.editor-backup-head{display:grid;gap:4px}.editor-backup-head strong{font-size:13px}.editor-backup-head small{font-size:11px;line-height:1.45;opacity:.72}.editor-backup-actions{display:flex;gap:8px;flex-wrap:wrap}.editor-backup-actions button{flex:1 1 140px}.editor-backup-preview{display:grid;gap:8px;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff)}.editor-backup-preview strong{font-size:12px}.editor-backup-preview p,.editor-backup-preview time{margin:0;font-size:12px;line-height:1.45;overflow-wrap:anywhere}.editor-backup-details{border-top:1px solid var(--divider-color,#ddd);padding-top:6px}.editor-backup-details>summary{display:flex;align-items:center;min-height:44px;padding:4px 6px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:750}.editor-backup-details>summary:focus-visible{outline:2px solid var(--primary-color,#c18c43);outline-offset:3px}.editor-backup-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin:0}.editor-backup-summary-item{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0;padding:7px 8px;border-radius:8px;background:var(--secondary-background-color,#f5f5f5);font-size:11px;line-height:1.4}.editor-backup-summary-item dt{margin:0;opacity:.72}.editor-backup-summary-item dd{margin:0;font-weight:600;text-align:right;overflow-wrap:anywhere}.editor-backup-status{font-size:12px;line-height:1.45;opacity:.78}
@@ -4117,22 +4211,29 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
         clearCurrentRoomTileSelection.disabled=selectedIndexes.length===0
       };
       appearanceToolbar.append(node('strong','Kopiuj wygląd kafelków'),appearanceStatus,appearanceFields,copyAppearance);updateAppearanceToolbar();panel.append(selectionActions,appearanceToolbar);
-      const states=this._hass?.states||{},existing=new Set(roomEntities.map(item=>typeof item==='string'?item:item?.entity).filter(Boolean)),options=this.editorEntityPickerOptions();
-      for(const id of [...this._pendingRoomEntityIds])if(existing.has(id)||!states[id])this._pendingRoomEntityIds.delete(id);
+      const existing=new Set(roomEntities.map(item=>typeof item==='string'?item:item?.entity).filter(Boolean));
       const bulk=node('details',undefined,'room-entity-bulk');bulk.open=this._pendingRoomEntityPickerOpen;bulk.setAttribute('data-velto-room-entity-picker','true');
       bulk.append(node('summary','＋ Dodaj urządzenia do pokoju'));
       const bulkBody=node('div',undefined,'room-entity-bulk-body'),search=document.createElement('input');search.type='search';search.className='room-entity-search';search.placeholder='Szukaj po nazwie lub ID…';search.value=this._pendingRoomEntityQuery;search.autocomplete='off';search.setAttribute('aria-label','Szukaj urządzeń do dodania do pokoju');search.setAttribute('data-velto-room-entity-search','true');
       const domainLabels=Object.assign(Object.create(null),{light:'Światła',switch:'Przełączniki',sensor:'Czujniki',binary_sensor:'Czujniki binarne',climate:'Klimatyzacja',cover:'Osłony',media_player:'Media',fan:'Wentylatory',lock:'Zamki',camera:'Kamery',vacuum:'Odkurzacze',scene:'Sceny',script:'Skrypty',automation:'Automatyzacje',person:'Osoby',device_tracker:'Lokalizatory',input_boolean:'Przełączniki pomocnicze',input_number:'Liczby pomocnicze',input_select:'Listy pomocnicze',input_text:'Tekst pomocniczy',button:'Przyciski',input_button:'Przyciski pomocnicze',number:'Liczby',select:'Listy',timer:'Timery',weather:'Pogoda',valve:'Zawory'});
-      const domainOptions=[...new Set(options.map(option=>option.domain).filter(Boolean))].sort();
-      if(!domainOptions.includes(this._pendingRoomEntityDomain))this._pendingRoomEntityDomain='';
       const domainFilter=document.createElement('select');domainFilter.className='room-entity-domain-filter';domainFilter.setAttribute('aria-label','Filtruj elementy według typu');domainFilter.setAttribute('data-velto-room-entity-domain','true');
       const allDomains=document.createElement('option');allDomains.value='';allDomains.textContent='Wszystkie typy';domainFilter.append(allDomains);
-      for(const domain of domainOptions){const option=document.createElement('option');option.value=domain;option.textContent=domainLabels[domain]||domain;domainFilter.append(option)}
-      domainFilter.value=this._pendingRoomEntityDomain;
+      let options=null,domainOptionsReady=false;
+      const getOptions=()=>options??(options=this.editorEntityPickerOptions());
+      const ensureDomainOptions=()=>{
+        const indexedOptions=getOptions();
+        if(domainOptionsReady)return indexedOptions;
+        const domainOptions=[...new Set(indexedOptions.map(option=>option.domain).filter(Boolean))].sort();
+        if(!domainOptions.includes(this._pendingRoomEntityDomain))this._pendingRoomEntityDomain='';
+        for(const domain of domainOptions){const option=document.createElement('option');option.value=domain;option.textContent=domainLabels[domain]||domain;domainFilter.append(option)}
+        domainFilter.value=this._pendingRoomEntityDomain;
+        domainOptionsReady=true;
+        return indexedOptions
+      };
       const status=node('small',undefined,'room-entity-count');status.id='velto-room-entity-count';status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.setAttribute('aria-atomic','true');
       const list=node('div',undefined,'room-entity-results');list.id='velto-room-entity-results';list.setAttribute('role','group');list.setAttribute('aria-label','Dostępne elementy Home Assistant');search.setAttribute('aria-controls',list.id);search.setAttribute('aria-describedby',status.id);domainFilter.setAttribute('aria-controls',list.id);domainFilter.setAttribute('aria-describedby',status.id);
       const actions=node('div',undefined,'room-entity-bulk-actions'),selectVisible=button('Zaznacz widoczne',()=>{for(const checkbox of list.querySelectorAll('input[type=checkbox]')){this._pendingRoomEntityIds.add(checkbox.value);checkbox.checked=true}updateSummary()}),clearSelection=button('Wyczyść wybór',()=>{this._pendingRoomEntityIds.clear();for(const checkbox of list.querySelectorAll('input[type=checkbox]'))checkbox.checked=false;updateSummary()}),addSelected=button('＋ Dodaj zaznaczone urządzenia (0)',()=>{
-        const additions=[...new Set(this._pendingRoomEntityIds)].filter(id=>states[id]&&!existing.has(id));
+        const currentStates=this._hass?.states||{},additions=[...new Set(this._pendingRoomEntityIds)].filter(id=>currentStates[id]&&!existing.has(id));
         if(!additions.length)return;
         this._pendingRoomEntityIds.clear();this._pendingRoomEntityQuery='';this._pendingRoomEntityDomain='';this._pendingRoomEntityPickerOpen=false;
         updateRoom({entities:[...roomEntities,...additions.map(entity=>({entity,size:'small'}))]})
@@ -4146,19 +4247,22 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
         const activeDomainLabel=domainLabels[this._pendingRoomEntityDomain]||this._pendingRoomEntityDomain;status.textContent=currentResults.count+' '+word+(currentResults.truncated?' · pokazuję maks. 60; zawęź wyszukiwanie':'')+(activeDomainLabel?' · typ: '+activeDomainLabel:'')+' · zaznaczono '+selectedCount
       };
       const renderOptions=()=>{
+        const indexedOptions=ensureDomainOptions(),currentStates=this._hass?.states||{};
+        for(const id of [...this._pendingRoomEntityIds])if(existing.has(id)||!currentStates[id])this._pendingRoomEntityIds.delete(id);
         this._pendingRoomEntityQuery=search.value;
-        currentResults=this.editorEntityPickerWindow(options,search.value,this._pendingRoomEntityIds,existing,60,this._pendingRoomEntityDomain);
+        currentResults=this.editorEntityPickerWindow(indexedOptions,search.value,this._pendingRoomEntityIds,existing,60,this._pendingRoomEntityDomain);
         list.replaceChildren();
         for(const option of currentResults.visible){
           const row=node('label',undefined,'room-entity-choice'),checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=option.value;checkbox.checked=this._pendingRoomEntityIds.has(option.value);
           checkbox.addEventListener('change',()=>{if(checkbox.checked)this._pendingRoomEntityIds.add(option.value);else this._pendingRoomEntityIds.delete(option.value);updateSummary()});
           const copy=node('span',undefined,'room-entity-choice-copy');copy.append(node('strong',option.label),node('small',option.value));row.append(checkbox,copy);list.append(row)
         }
-        if(!currentResults.visible.length){const empty=search.value.trim()?'Brak pasujących urządzeń.':options.length?'Wszystkie dostępne urządzenia są już przypisane.':'Brak elementów w rejestrze Home Assistant.';list.append(node('p',empty,'room-entity-empty'))}
+        if(!currentResults.visible.length){const empty=search.value.trim()?'Brak pasujących urządzeń.':indexedOptions.length?'Wszystkie dostępne urządzenia są już przypisane.':'Brak elementów w rejestrze Home Assistant.';list.append(node('p',empty,'room-entity-empty'))}
         selectVisible.disabled=currentResults.visible.length===0;updateSummary()
       };
-      search.addEventListener('input',renderOptions);domainFilter.addEventListener('change',()=>{this._pendingRoomEntityDomain=domainFilter.value;renderOptions()});bulk.addEventListener('toggle',()=>{this._pendingRoomEntityPickerOpen=bulk.open});
-      renderOptions();bulkBody.append(search,domainFilter,status,list,actions);bulk.append(bulkBody);panel.append(bulk);
+      search.addEventListener('input',renderOptions);domainFilter.addEventListener('change',()=>{this._pendingRoomEntityDomain=domainFilter.value;renderOptions()});bulk.addEventListener('toggle',()=>{this._pendingRoomEntityPickerOpen=bulk.open;if(bulk.open)renderOptions()});
+      if(bulk.open)renderOptions();
+      bulkBody.append(search,domainFilter,status,list,actions);bulk.append(bulkBody);panel.append(bulk);
       wrap.append(panel);
     }
     wrap.append(node('div','Obecność domownika','section'));
